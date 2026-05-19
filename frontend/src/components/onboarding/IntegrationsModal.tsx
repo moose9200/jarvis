@@ -49,10 +49,26 @@ export function IntegrationsModal({ onClose }: Props) {
     }
   };
 
-  // For OAuth providers, we need to pass the token in the URL since we're doing a redirect
-  const connectUrl = (name: string) => {
-    if (!token) return `${API}/api/auth/${name}/start`;
-    return `${API}/api/auth/${name}/start?token=${token}`;
+  // OAuth /start endpoints accept a one-time code (60s TTL) instead of the JWT.
+  // Mint a fresh code, then redirect the browser. Code is single-use and never
+  // exposes the long-lived JWT in URLs, server logs, or referrer headers.
+  const startConnect = async (name: string) => {
+    if (!token) {
+      window.location.href = `${API}/api/auth/${name}/start`;
+      return;
+    }
+    try {
+      const r = await fetch(`${API}/api/users/oauth-code`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!r.ok) throw new Error(`code mint failed: ${r.status}`);
+      const { code } = await r.json();
+      window.location.href = `${API}/api/auth/${name}/start?code=${encodeURIComponent(code)}`;
+    } catch (e) {
+      console.error("OAuth start failed:", e);
+      alert("Could not start OAuth flow. Check your connection and try again.");
+    }
   };
 
   return (
@@ -110,12 +126,12 @@ export function IntegrationsModal({ onClose }: Props) {
                     </button>
                   </div>
                 ) : c.configured ? (
-                  <a
-                    href={connectUrl(c.name)}
+                  <button
+                    onClick={() => startConnect(c.name)}
                     className="shrink-0 px-3 py-1.5 text-xs font-bold uppercase tracking-wider border border-[#00d4ff]/50 text-[#00d4ff] rounded hover:bg-[#00d4ff]/10 transition-colors"
                   >
                     Connect
-                  </a>
+                  </button>
                 ) : (
                   <span
                     title="Add credentials to backend/.env to enable this integration"

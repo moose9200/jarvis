@@ -4,8 +4,8 @@
 
 ## Current Status
 **Last session:** 2026-05-20  
-**Last completed:** Spec written (JARVIS_V2_MASTER_PROMPT.md)  
-**Next task:** Step 0 — Security fixes  
+**Last completed:** Step 0 — Security hardening (all 7 sub-tasks verified)
+**Next task:** Step 1 — Infrastructure migration (PostgreSQL + Redis + Celery + S3)
 **Blocked by:** Nothing. Ready to build.
 
 ---
@@ -17,13 +17,13 @@ After each full step: git commit with message `step X: description`.
 ---
 
 ## STEP 0 — Security Fixes (do first, blocks everything)
-- [ ] 0.1 Crash on missing JWT_SECRET / SESSION_SECRET
-- [ ] 0.2 Remove ?token= query param from get_current_user, add one-time code exchange
-- [ ] 0.3 Encrypt OAuth tokens at rest (create backend/crypto.py)
-- [ ] 0.4 Fix error leakage in chat.py (no detail=str(e), no traceback.print_exc)
-- [ ] 0.5 Rate limit /register and /login (5/minute)
-- [ ] 0.6 Add max_length=2000 to ChatIn message field
-- [ ] 0.7 CORS from ALLOWED_ORIGINS env var
+- [x] 0.1 Crash on missing JWT_SECRET / SESSION_SECRET (also TOKEN_ENCRYPTION_KEY)
+- [x] 0.2 Remove ?token= query param from get_current_user, add one-time code exchange
+- [x] 0.3 Encrypt OAuth tokens at rest (create backend/crypto.py)
+- [x] 0.4 Fix error leakage in chat.py (no detail=str(e), no traceback.print_exc)
+- [x] 0.5 Rate limit /register and /login (5/minute)
+- [x] 0.6 Add max_length=2000 to ChatIn message field
+- [x] 0.7 CORS from ALLOWED_ORIGINS env var
 
 **Commit:** `git commit -m "step 0: security hardening"`
 
@@ -291,3 +291,8 @@ _Add notes here as you make architecture decisions or discover issues_
 - 2026-05-20: Spec written. Provider-agnostic AI layer required — no direct Anthropic imports in business logic.
 - 2026-05-20: BYOAK model confirmed. Users bring their own API key (Anthropic/OpenAI/Groq/Mistral/Google).
 - 2026-05-20: Default personality = caveman (saves ~60% output tokens for users).
+- 2026-05-20: Step 0 complete. Notes:
+  - Added TOKEN_ENCRYPTION_KEY as a required boot-time secret (in addition to JWT_SECRET, SESSION_SECRET).
+  - One-time OAuth code store is in-memory (backend/oauth_code.py) — single-worker only. Migrate to Redis in Step 1.3.
+  - crypto.decrypt() falls back to plaintext passthrough for legacy rows so existing OAuth connections keep working until the next reconnect. New writes are always Fernet-encrypted.
+  - Shared `backend/rate_limit.py` exports a single Limiter so router decorators and main.py exception handler bind to the same instance.

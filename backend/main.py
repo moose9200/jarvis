@@ -1,16 +1,23 @@
 import os
+import sys
 from dotenv import load_dotenv
 load_dotenv()
+
+# ── FATAL: refuse to start if required secrets are missing ──────────────────
+for _required in ("JWT_SECRET", "SESSION_SECRET", "TOKEN_ENCRYPTION_KEY"):
+    if not os.getenv(_required):
+        print(f"FATAL: {_required} env var not set", file=sys.stderr)
+        sys.exit(1)
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from database import Base, engine
+from rate_limit import limiter
 import models  # noqa
 import migrations
 from routers import auth, feed, email_intelligence, chat, users
@@ -18,20 +25,19 @@ from routers import auth, feed, email_intelligence, chat, users
 migrations.run(engine)
 Base.metadata.create_all(bind=engine)
 
-limiter = Limiter(key_func=get_remote_address)
-
 app = FastAPI(title="JARVIS Backend", version="0.1.0")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     SessionMiddleware,
-    secret_key=os.getenv("SESSION_SECRET", "dev-secret"),
+    secret_key=os.getenv("SESSION_SECRET"),
 )
 
+_origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:80", "http://localhost"],
+    allow_origins=_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

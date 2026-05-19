@@ -9,9 +9,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
+from crypto import encrypt
 from database import get_db
 from models import OAuthToken, User
-from routers.users import get_current_user
+from routers.users import get_current_user, get_oauth_user
 
 router = APIRouter()
 
@@ -59,9 +60,9 @@ def _save(db: Session, provider: str, access: str, refresh: str = None,
     if not tok:
         tok = OAuthToken(provider=provider, user_id=user_id)
         db.add(tok)
-    tok.access_token = access
+    tok.access_token = encrypt(access)
     if refresh:
-        tok.refresh_token = refresh
+        tok.refresh_token = encrypt(refresh)
     tok.expires_at = datetime.utcnow() + timedelta(seconds=ttl)
     tok.scope = scope
     db.commit()
@@ -118,7 +119,7 @@ def _google_oauth_redirect(request: Request, current_user: User):
 
 
 @router.get("/google/start")
-def google_start(request: Request, current_user: User = Depends(get_current_user)):
+def google_start(request: Request, current_user: User = Depends(get_oauth_user)):
     return _google_oauth_redirect(request, current_user)
 
 
@@ -148,18 +149,18 @@ async def google_callback(request: Request, code: str, state: str, db: Session =
 
 
 @router.get("/gmail/start")
-def gmail_start(request: Request, current_user: User = Depends(get_current_user)):
+def gmail_start(request: Request, current_user: User = Depends(get_oauth_user)):
     return google_start(request, current_user)
 
 
 @router.get("/google_calendar/start")
-def gcal_start(request: Request, current_user: User = Depends(get_current_user)):
+def gcal_start(request: Request, current_user: User = Depends(get_oauth_user)):
     return google_start(request, current_user)
 
 
 # ---------- Microsoft (Outlook Mail + Calendar + Teams) ----------
 @router.get("/microsoft/start")
-def ms_start(request: Request, current_user: User = Depends(get_current_user)):
+def ms_start(request: Request, current_user: User = Depends(get_oauth_user)):
     if not _is_configured("outlook_mail"):
         return _not_configured_redirect("microsoft")
     state = secrets.token_urlsafe(16)
@@ -205,23 +206,23 @@ async def ms_callback(request: Request, code: str, state: str, db: Session = Dep
 
 
 @router.get("/outlook_mail/start")
-def om_start(request: Request, current_user: User = Depends(get_current_user)):
+def om_start(request: Request, current_user: User = Depends(get_oauth_user)):
     return ms_start(request, current_user)
 
 
 @router.get("/outlook_calendar/start")
-def oc_start(request: Request, current_user: User = Depends(get_current_user)):
+def oc_start(request: Request, current_user: User = Depends(get_oauth_user)):
     return ms_start(request, current_user)
 
 
 @router.get("/teams/start")
-def teams_start(request: Request, current_user: User = Depends(get_current_user)):
+def teams_start(request: Request, current_user: User = Depends(get_oauth_user)):
     return ms_start(request, current_user)
 
 
 # ---------- Slack ----------
 @router.get("/slack/start")
-def slack_start(request: Request, current_user: User = Depends(get_current_user)):
+def slack_start(request: Request, current_user: User = Depends(get_oauth_user)):
     if not _is_configured("slack"):
         return _not_configured_redirect("slack")
     request.session["oauth_user_id"] = current_user.id
@@ -256,7 +257,7 @@ async def slack_callback(request: Request, code: str, db: Session = Depends(get_
 
 # ---------- GitHub ----------
 @router.get("/github/start")
-def github_start(request: Request, current_user: User = Depends(get_current_user)):
+def github_start(request: Request, current_user: User = Depends(get_oauth_user)):
     if not _is_configured("github"):
         return _not_configured_redirect("github")
     request.session["oauth_user_id"] = current_user.id
@@ -291,7 +292,7 @@ async def github_callback(request: Request, code: str, db: Session = Depends(get
 
 # ---------- Static-key connectors ----------
 @router.get("/linear/start")
-def linear_start(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def linear_start(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_oauth_user)):
     if not _is_configured("linear"):
         return _not_configured_redirect("linear")
     _save(db, "linear", os.getenv("LINEAR_API_KEY", ""), ttl=10**9, user_id=current_user.id)
@@ -299,7 +300,7 @@ def linear_start(request: Request, db: Session = Depends(get_db), current_user: 
 
 
 @router.get("/jira/start")
-def jira_start(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def jira_start(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_oauth_user)):
     if not _is_configured("jira"):
         return _not_configured_redirect("jira")
     _save(db, "jira", os.getenv("JIRA_TOKEN", ""), ttl=10**9, user_id=current_user.id)
@@ -307,7 +308,7 @@ def jira_start(request: Request, db: Session = Depends(get_db), current_user: Us
 
 
 @router.get("/notion/start")
-def notion_start(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def notion_start(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_oauth_user)):
     if not _is_configured("notion"):
         return _not_configured_redirect("notion")
     _save(db, "notion", os.getenv("NOTION_TOKEN", ""), ttl=10**9, user_id=current_user.id)
@@ -315,7 +316,7 @@ def notion_start(request: Request, db: Session = Depends(get_db), current_user: 
 
 
 @router.get("/whatsapp/start")
-def whatsapp_start(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def whatsapp_start(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_oauth_user)):
     if not _is_configured("whatsapp"):
         return _not_configured_redirect("whatsapp")
     _save(db, "whatsapp", os.getenv("WHATSAPP_TOKEN", ""), ttl=10**9, user_id=current_user.id)

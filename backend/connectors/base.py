@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
+
+from crypto import decrypt
 from models import OAuthToken
 
 
@@ -19,7 +21,11 @@ class Connector(ABC):
 
     def access(self) -> Optional[str]:
         t = self.token()
-        return t.access_token if t else None
+        return decrypt(t.access_token) if t else None
+
+    def refresh(self) -> Optional[str]:
+        t = self.token()
+        return decrypt(t.refresh_token) if (t and t.refresh_token) else None
 
     @abstractmethod
     async def fetch(self, **kwargs) -> List[Dict[str, Any]]:
