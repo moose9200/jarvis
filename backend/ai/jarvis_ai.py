@@ -22,10 +22,13 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
+import json as _json
+
 from crypto import decrypt
-from models import TokenUsage, UserSettings
+from models import TokenUsage, UserContext, UserSettings
 
 from .exceptions import NoAPIKeyError
+from .knowledge import search as knowledge_search
 from .memory import ConversationMemory
 from .persona import build_system_prompt
 from .providers.base import AIMessage, AIResponse, AITool
@@ -109,7 +112,10 @@ class JarvisAI:
         self.memory.append("user", user_message)
         await self.memory.maybe_compress()
 
-        system_text = self._build_system_text()
+        # RAG: fetch relevant chunks before building the system prompt
+        knowledge_block = await self._build_knowledge_block(user_message)
+
+        system_text = self._build_system_text(knowledge_block=knowledge_block)
         messages: list[AIMessage] = self._build_message_history()
 
         # Accumulate usage across all tool-loop turns
@@ -160,13 +166,62 @@ class JarvisAI:
 
     # ── Internals ───────────────────────────────────────────────────────
 
-    def _build_system_text(self) -> str:
+    def _build_system_text(self, knowledge_block: str = "") -> str:
         personality = self.settings.personality_mode if self.settings else None
         s = build_system_prompt(personality)
+
+        # Inject UserContext (about_me, communication style, priorities, team)
+        ctx_block = self._build_context_block()
+        if ctx_block:
+            s += "\n\n" + ctx_block
+
+        # Inject retrieved RAG chunks
+        if knowledge_block:
+            s += "\n\n" + knowledge_block
+
+        # Inject compressed earlier-conversation summary
         summary = self.memory.summaries()
         if summary:
             s += f"\n\nEarlier-conversation summary:\n{summary}"
         return s
+
+    def _build_context_block(self) -> str:
+        if self.user_id is None:
+            return ""
+        ctx = self.db.query(UserContext).filter_by(user_id=self.user_id).first()
+        if not ctx:
+            return ""
+        parts = []
+        if ctx.about_me:
+            parts.append(f"About boss: {ctx.about_me}")
+        if ctx.communication_style:
+            parts.append(f"Communication style: {ctx.communication_style}")
+        if ctx.priorities:
+            parts.append(f"Top priorities: {ctx.priorities}")
+        if ctx.team_members:
+            try:
+                team = _json.dumps(ctx.team_members)
+                parts.append(f"Team: {team}")
+            except Exception:
+                pass
+        if ctx.business_context:
+            parts.append(f"Business context: {ctx.business_context}")
+        if not parts:
+            return ""
+        return "USER CONTEXT — USE THIS TO PERSONALIZE ALL RESPONSES:\n" + "\n".join(parts)
+
+    async def _build_knowledge_block(self, query: str) -> str:
+        if self.user_id is None:
+            return ""
+        try:
+            chunks = await knowledge_search(self.db, self.user_id, query, limit=5)
+        except Exception:
+            logger.exception("knowledge search failed")
+            return ""
+        if not chunks:
+            return ""
+        body = "\n---\n".join(c.content for c in chunks if c.content)
+        return f"RELEVANT KNOWLEDGE FROM USER'S DATA:\n{body}"
 
     def _build_message_history(self) -> list[AIMessage]:
         return [AIMessage(role=t["role"], content=t["content"]) for t in self.memory.window()]

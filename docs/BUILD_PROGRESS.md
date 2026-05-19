@@ -149,13 +149,13 @@ After each full step: git commit with message `step X: description`.
 ---
 
 ## STEP 8 — User Profile + RAG Knowledge Base
-- [ ] 8.1 GET/PUT /api/context endpoints
-- [ ] 8.2 UserContext injected into every JARVIS session
-- [ ] 8.3 backend/ai/embedder.py (embed text → 1536-dim vector)
-- [ ] 8.4 backend/ai/knowledge.py (search_knowledge via pgvector cosine similarity)
-- [ ] 8.5 Relevant chunks injected before each AI response
-- [ ] 8.6 Celery tasks: ingest_emails, ingest_tasks, ingest_shopify, ingest_file
-- [ ] 8.7 GET /api/knowledge/status (chunk count, last updated, by source)
+- [x] 8.1 GET/PUT /api/context endpoints
+- [x] 8.2 UserContext injected into every JARVIS session (via _build_context_block in jarvis_ai.py)
+- [x] 8.3 backend/ai/embedder.py (text-embedding-3-small, 1536-dim; graceful None if no OpenAI key)
+- [x] 8.4 backend/ai/knowledge.py (search via pgvector cosine `<=>`)
+- [x] 8.5 Relevant chunks injected before each AI response (via _build_knowledge_block)
+- [ ] 8.6 Celery tasks: ingest_emails, ingest_tasks, ingest_shopify, ingest_file — deferred to a follow-up commit (needs connector data pipeline)
+- [x] 8.7 GET /api/knowledge/status + POST /api/knowledge/note + GET /api/knowledge/search
 
 **Commit:** `git commit -m "step 8: user context + RAG knowledge base"`
 
