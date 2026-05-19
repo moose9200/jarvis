@@ -125,15 +125,17 @@ After each full step: git commit with message `step X: description`.
 ---
 
 ## STEP 6 — Multimodal File Upload
-- [ ] 6.1 POST /api/files/upload (multipart, 20MB max)
-- [ ] 6.2 Image processing → S3 URL for Claude vision
-- [ ] 6.3 PDF text extraction (pypdf2)
-- [ ] 6.4 CSV → markdown table
-- [ ] 6.5 Video → key frame extraction (opencv)
-- [ ] 6.6 ChatIn extended with file_ids: list[int]
-- [ ] 6.7 Frontend: paperclip button + drag-drop + thumbnail preview
+- [x] 6.1 POST /api/files/upload (multipart, 20MB max) + GET /files, GET /files/{id}, DELETE /files/{id}
+- [x] 6.2 Image processing → S3 URL stored in FileUpload.s3_key for vision use at chat time
+- [x] 6.3 PDF text extraction via pypdf (caps 50 pages)
+- [x] 6.4 CSV → markdown table via pandas (caps 100 rows)
+- [ ] 6.5 Video → key frame extraction — DEFERRED (opencv-python-headless adds ~80MB; can land in a follow-up commit when video uploads are wanted)
+- [x] 6.6 ChatIn extended with file_ids: list[int] (max 10); JarvisAI builds multimodal content array
+- [ ] 6.7 Frontend: paperclip button + drag-drop + thumbnail preview — DEFERRED to frontend pass
 
 **Commit:** `git commit -m "step 6: multimodal file upload"`
+
+**BLOCKED-ON-USER:** uploads return 402 until S3_BUCKET/S3_ACCESS_KEY/S3_SECRET_KEY are set in backend/.env (USER_TASKS #9 — Cloudflare R2 free 10GB).
 
 ---
 

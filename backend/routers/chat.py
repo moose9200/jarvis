@@ -45,6 +45,7 @@ QUICK_ACTIONS = [
 
 class ChatIn(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000)
+    file_ids: list[int] = Field(default_factory=list, max_length=10)
 
 
 @router.post("/chat")
@@ -55,7 +56,7 @@ async def chat(
 ):
     try:
         client = JarvisAI(db, current_user.id)
-        out = await client.respond(payload.message)
+        out = await client.respond(payload.message, file_ids=payload.file_ids)
         return {"reply": out["text"], "usage": out["usage"]}
     except NoAPIKeyError as e:
         raise HTTPException(

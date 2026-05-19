@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 import json as _json
 
 from crypto import decrypt
-from models import TokenUsage, UserContext, UserSettings
+from models import FileUpload, TokenUsage, UserContext, UserSettings
 
 from .exceptions import NoAPIKeyError
 from .knowledge import search as knowledge_search
@@ -104,19 +104,31 @@ class JarvisAI:
 
     # ── Public API ──────────────────────────────────────────────────────
 
-    async def respond(self, user_message: str) -> dict:
-        """Send a user message, run any tool loops, return:
+    async def respond(self, user_message: str, file_ids: Optional[list[int]] = None) -> dict:
+        """Send a user message (optionally with attached files), run any tool
+        loops, return:
             {"text": str, "usage": {input, output, cache_read, cache_write,
                                     thinking, cost_usd, model, provider}}
         Token usage is also persisted to the TokenUsage table."""
-        self.memory.append("user", user_message)
+        # Persist a plain-text version of the user's turn (file refs as labels)
+        memory_content = self._memory_text(user_message, file_ids or [])
+        self.memory.append("user", memory_content)
         await self.memory.maybe_compress()
 
         # RAG: fetch relevant chunks before building the system prompt
         knowledge_block = await self._build_knowledge_block(user_message)
 
         system_text = self._build_system_text(knowledge_block=knowledge_block)
+
+        # Build the history. The CURRENT turn may be multimodal — replace the
+        # last message's content with a content-blocks array if files attached.
         messages: list[AIMessage] = self._build_message_history()
+        if file_ids:
+            multimodal = self._build_multimodal_content(user_message, file_ids)
+            if messages and messages[-1].role == "user":
+                messages[-1] = AIMessage(role="user", content=multimodal)
+            else:
+                messages.append(AIMessage(role="user", content=multimodal))
 
         # Accumulate usage across all tool-loop turns
         agg = {
@@ -290,6 +302,45 @@ class JarvisAI:
         if not parts:
             return ""
         return "USER CONTEXT — USE THIS TO PERSONALIZE ALL RESPONSES:\n" + "\n".join(parts)
+
+    def _build_multimodal_content(self, user_message: str, file_ids: list[int]) -> list[dict]:
+        """Build the multimodal content array per Anthropic schema:
+          [{type:"image", source:{type:"url", url:...}}, ...,
+           {type:"text", text:"<extracted PDF body>"}, ...,
+           {type:"text", text:"<user message>"}]
+        OpenAIProvider flattens this to OpenAI's shape automatically."""
+        blocks: list[dict] = []
+        if self.user_id is None:
+            return [{"type": "text", "text": user_message}]
+        rows = (
+            self.db.query(FileUpload)
+            .filter(FileUpload.id.in_(file_ids), FileUpload.user_id == self.user_id)
+            .all()
+        )
+        for fu in rows:
+            if fu.file_type == "image" and fu.s3_key:
+                blocks.append(
+                    {"type": "image", "source": {"type": "url", "url": fu.s3_key}}
+                )
+            elif fu.extracted_text:
+                blocks.append(
+                    {
+                        "type": "text",
+                        "text": f"[Attachment: {fu.filename}]\n{fu.extracted_text[:8000]}",
+                    }
+                )
+            else:
+                blocks.append(
+                    {"type": "text", "text": f"[Attachment: {fu.filename} — unprocessed]"}
+                )
+        blocks.append({"type": "text", "text": user_message})
+        return blocks
+
+    @staticmethod
+    def _memory_text(user_message: str, file_ids: list[int]) -> str:
+        if not file_ids:
+            return user_message
+        return f"{user_message}  [files: {','.join(str(f) for f in file_ids)}]"
 
     async def _build_knowledge_block(self, query: str) -> str:
         if self.user_id is None:
