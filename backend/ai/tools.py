@@ -141,6 +141,24 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
             "required": ["title"],
         },
     },
+    {
+        "name": "push_to_github",
+        "description": (
+            "Save a document, report, or draft as a Markdown file in the user's "
+            "configured GitHub repository (UserSettings.github_repo_url). "
+            "Requires the user's GitHub PAT in settings. Returns the commit URL."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "filename": {"type": "string", "description": "File name with extension (e.g. 'weekly-brief.md')."},
+                "content":  {"type": "string", "description": "Full file contents."},
+                "commit_message": {"type": "string", "description": "Commit message. Default: 'jarvis: add <filename>'."},
+                "path":     {"type": "string", "description": "Folder path inside repo (e.g. 'reports/'). Default: root."},
+            },
+            "required": ["filename", "content"],
+        },
+    },
 ]
 
 
@@ -273,6 +291,76 @@ async def dispatch(name: str, inputs: Dict[str, Any], db: Session, user_id: int 
             issue = data.get("issue", {})
             return {"created": True, "id": issue.get("identifier"), "title": title, "url": issue.get("url")}
         return {"error": "Linear issue creation returned success=false"}
+
+    elif name == "push_to_github":
+        # Save a file into the user's configured GitHub repository via the
+        # Contents API. Needs UserSettings.github_repo_url +
+        # UserSettings.github_pat_encrypted to be set.
+        import base64
+        import httpx
+
+        from crypto import decrypt
+        from models import UserSettings
+
+        if user_id is None:
+            return {"error": "Authentication required for GitHub push"}
+        settings = db.query(UserSettings).filter_by(user_id=user_id).first()
+        if not settings or not settings.github_repo_url or not settings.github_pat_encrypted:
+            return {"error": "GitHub not configured. Add repo URL + PAT in Settings → GitHub."}
+
+        try:
+            pat = decrypt(settings.github_pat_encrypted) or ""
+        except Exception:
+            return {"error": "GitHub PAT decrypt failed"}
+        if not pat:
+            return {"error": "GitHub PAT is empty"}
+
+        # Parse owner/repo from URL: https://github.com/owner/repo[.git][/]
+        url = settings.github_repo_url.strip().rstrip("/")
+        if url.endswith(".git"):
+            url = url[:-4]
+        m = url.rsplit("github.com/", 1)
+        if len(m) != 2:
+            return {"error": f"Could not parse owner/repo from {settings.github_repo_url}"}
+        owner_repo = m[1]
+        if owner_repo.count("/") != 1:
+            return {"error": f"Expected owner/repo, got {owner_repo}"}
+
+        filename = inputs.get("filename", "").strip()
+        content = inputs.get("content", "")
+        commit_message = inputs.get("commit_message") or f"jarvis: add {filename}"
+        path_prefix = (inputs.get("path") or "").strip().strip("/")
+        full_path = f"{path_prefix}/{filename}" if path_prefix else filename
+        if not filename or not content:
+            return {"error": "filename and content are required"}
+
+        encoded = base64.b64encode(content.encode()).decode()
+        api = f"https://api.github.com/repos/{owner_repo}/contents/{full_path}"
+        headers = {
+            "Authorization": f"Bearer {pat}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+
+        async with httpx.AsyncClient(timeout=15) as c:
+            # Check if the file exists to grab its sha (required for update)
+            existing = await c.get(api, headers=headers)
+            sha = existing.json().get("sha") if existing.status_code == 200 else None
+            body: dict = {"message": commit_message, "content": encoded}
+            if sha:
+                body["sha"] = sha
+            r = await c.put(api, headers=headers, json=body)
+
+        if r.status_code not in (200, 201):
+            return {"error": f"GitHub push failed: {r.status_code} {r.text[:200]}"}
+        j = r.json()
+        return {
+            "pushed": True,
+            "filename": filename,
+            "path": full_path,
+            "commit_url": j.get("commit", {}).get("html_url"),
+            "content_url": j.get("content", {}).get("html_url"),
+        }
 
     else:
         return {"error": f"unknown tool {name}"}

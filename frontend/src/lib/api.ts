@@ -116,6 +116,41 @@ export const TokensAPI = {
     ),
 };
 
+// ── Decisions ──────────────────────────────────────────────────────────────
+
+export interface DecisionRow {
+  id: number;
+  source: string;
+  source_id: string | null;
+  title: string;
+  context_json: any;
+  status: string;
+  ai_suggestion: string | null;
+  snoozed_until: string | null;
+  created_at: string | null;
+  decided_at: string | null;
+}
+
+export const DecisionsAPI = {
+  list: (status: string = "pending") =>
+    call<{ decisions: DecisionRow[] }>(`/api/decisions?status=${encodeURIComponent(status)}`),
+
+  patch: (id: number, patch: { status?: string; ai_suggestion?: string; snooze_hours?: number }) =>
+    call<DecisionRow>(`/api/decisions/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
+
+  remove: (id: number) =>
+    call<{ ok: boolean }>(`/api/decisions/${id}`, { method: "DELETE" }),
+
+  create: (d: Partial<DecisionRow>) =>
+    call<DecisionRow>("/api/decisions", {
+      method: "POST",
+      body: JSON.stringify(d),
+    }),
+};
+
 // ── Chat meta ───────────────────────────────────────────────────────────────
 
 export const ChatMetaAPI = {

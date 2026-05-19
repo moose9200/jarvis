@@ -14,6 +14,7 @@ import { ProfileDropdown } from "./components/ui/ProfileDropdown";
 import { DashboardCustomizer } from "./components/ui/DashboardCustomizer";
 import { SettingsPage } from "./components/settings/SettingsPage";
 import { TokenMonitor } from "./components/settings/TokenMonitor";
+import { DecisionInbox } from "./components/founder/DecisionInbox";
 import { useJarvisStore } from "./store/jarvisStore";
 import { useWakeWord } from "./hooks/useWakeWord";
 import { useVoice } from "./hooks/useVoice";
@@ -50,6 +51,7 @@ export default function App() {
   const [showCustomizer, setShowCustomizer] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showTokens, setShowTokens] = useState(false);
+  const [showDecisions, setShowDecisions] = useState(false);
 
   // All hooks before conditional return
   useEffect(() => {
@@ -123,7 +125,14 @@ export default function App() {
           <ModeToggle />
         </div>
 
-        {/* Right: Token monitor + Profile dropdown */}
+        {/* Right: Decisions + Token monitor + Profile dropdown */}
+        <button
+          onClick={() => setShowDecisions(true)}
+          title="Decision inbox"
+          className="px-2.5 py-1.5 rounded-lg border border-jcyan/30 bg-jcyan/5 text-jcyan text-xs font-bold uppercase tracking-widest hover:bg-jcyan/15 transition-colors"
+        >
+          ⚖
+        </button>
         <button
           onClick={() => setShowTokens(true)}
           title="Token usage + cost"
@@ -167,6 +176,7 @@ export default function App() {
       />
       <SettingsPage open={showSettings} onClose={() => setShowSettings(false)} />
       <TokenMonitor open={showTokens} onClose={() => setShowTokens(false)} />
+      <DecisionInbox open={showDecisions} onClose={() => setShowDecisions(false)} />
 
       {/* ── Toast notifications ──────────────────────────────────────────────── */}
       <ToastStack />

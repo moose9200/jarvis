@@ -4,9 +4,9 @@
 
 ## Current Status
 **Last session:** 2026-05-20  
-**Last completed:** Step 13 (Settings page, 6 tabs) + Step 12 (Token Monitor slide-out) — full frontend wiring done.
-**Next task:** Step 11 (dashboard use-case prompts) OR Step 14 (founder intelligence features)
-**Blocked by:** Nothing autonomously. Several features blocked-on-user for credentials (see USER_TASKS.txt): Shopify/Freshdesk integrations (Step 9/10), Stripe billing (Step 22), S3 file uploads (Step 6 backend works, needs S3 keys to be useful).
+**Last completed:** Step 14 (Decision Inbox CRUD + frontend panel + push_to_github tool) + Step 11 (use-case prompts).
+**Next task:** Step 25 (deployment notes) — and then we wait for user to wake up + provide Shopify/Freshdesk/Stripe/S3 credentials to unblock Steps 6 (S3), 9, 10, 22.
+**Blocked by:** Several features blocked-on-user for credentials (USER_TASKS.txt): Shopify (Step 9), Freshdesk (Step 10), Stripe billing (Step 22), S3 file uploads (Step 6 already works once keys exist), Celery beat jobs (14.1 inbox builder, 14.2 meeting prep, 14.4 weekly brief).
 
 ---
 
@@ -239,14 +239,16 @@ After each full step: git commit with message `step X: description`.
 ---
 
 ## STEP 14 — Founder Intelligence Features
-- [ ] 14.1 Decision inbox: GET/PATCH /api/decisions, Celery build job
-- [ ] 14.2 Smart meeting prep: Celery task 20min before events
-- [ ] 14.3 Proactive task creation: email commitment detection
-- [ ] 14.4 Weekly business brief: Monday 8am Celery beat
-- [ ] 14.5 GitHub push tool: push_to_github in tools.py
-- [ ] 14.6 Frontend: DecisionInboxPanel, MeetingPrepBanner
+- [x] 14.1 Decision inbox API: GET / POST / PATCH / DELETE /api/decisions with snooze + status transitions. Celery build job DEFERRED (needs Shopify/Freshdesk/GitHub connectors fully wired with credentials).
+- [ ] 14.2 Smart meeting prep: Celery task 20min before events — DEFERRED (needs Celery beat + calendar webhook).
+- [ ] 14.3 Proactive task creation: email commitment detection — DEFERRED (needs scheduled email ingest).
+- [ ] 14.4 Weekly business brief: Monday 8am Celery beat — DEFERRED (needs Celery beat schedule + Shopify/Freshdesk data).
+- [x] 14.5 GitHub push tool: push_to_github tool added to ai/tools.py (commits to user's configured repo via Contents API; uses encrypted PAT).
+- [x] 14.6 Frontend: DecisionInbox slide-in panel triggered by ⚖ button in top bar. Approve/Reject/Delegate/Snooze (24h) actions per card.
 
 **Commit:** `git commit -m "step 14: founder intelligence features"`
+
+**Note:** Decision inbox is built and tested with manual POST; populating it with real items requires the Celery `build_decision_inbox` task which needs Shopify/Freshdesk data (USER_TASKS #6, #7).
 
 ---
 
