@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { ReactNode, useState } from "react";
 
 interface Props {
@@ -77,17 +77,23 @@ export function PanelWrapper({ title, icon, children, corner, onRefresh, badge }
         </button>
       </div>
 
-      {/* Body */}
-      <motion.div
-        initial={false}
-        animate={{ height: collapsed ? 0 : "auto", opacity: collapsed ? 0 : 1 }}
-        transition={{ type: "spring", stiffness: 400, damping: 35 }}
-        className="flex-1 overflow-hidden"
-      >
-        <div className="h-full overflow-auto p-3 text-sm space-y-2 pr-2">
-          {children}
-        </div>
-      </motion.div>
+      {/* Body — AnimatePresence lets framer-motion measure real height */}
+      <AnimatePresence initial={false}>
+        {!collapsed && (
+          <motion.div
+            key="body"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 380, damping: 32 }}
+            className="overflow-hidden flex-1"
+          >
+            <div className="overflow-auto p-3 text-sm space-y-2 pr-2 max-h-[calc(50vh-4rem)]">
+              {children}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

@@ -138,41 +138,59 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
 
   fetchFeed: async () => {
     const { token } = get();
-    const r = await fetch(`${API}/api/feed`, { headers: authHeaders(token) });
-    if (!r.ok) return;
-    const data = await r.json();
-    set({
-      events: data.events || [],
-      emails: data.emails || [],
-      messages: data.messages || [],
-      tasks: data.tasks || [],
-      projects: data.projects || [],
-    });
+    try {
+      const r = await fetch(`${API}/api/feed`, { headers: authHeaders(token) });
+      if (!r.ok) return;
+      const data = await r.json();
+      set({
+        events: data.events || [],
+        emails: data.emails || [],
+        messages: data.messages || [],
+        tasks: data.tasks || [],
+        projects: data.projects || [],
+      });
+    } catch { /* network or parse error — silently ignore */ }
   },
 
   fetchConnectors: async () => {
     const { token } = get();
-    const r = await fetch(`${API}/api/auth/status`, { headers: authHeaders(token) });
-    if (!r.ok) return;
-    const data = await r.json();
-    set({ connectors: data.connectors || [] });
+    try {
+      const r = await fetch(`${API}/api/auth/status`, { headers: authHeaders(token) });
+      if (!r.ok) return;
+      const data = await r.json();
+      set({ connectors: data.connectors || [] });
+    } catch { /* silently ignore */ }
   },
 
   sendChat: async (text: string) => {
     const { token } = get();
     get().appendChat({ role: "user", text, timestamp: Date.now() });
     set({ wakeState: "processing" });
-    const r = await fetch(`${API}/api/chat`, {
-      method: "POST",
-      headers: authHeaders(token),
-      body: JSON.stringify({ message: text }),
-    });
-    const data = await r.json();
-    const reply = data.reply || "";
-    get().appendChat({ role: "assistant", text: reply, timestamp: Date.now() });
-    set({ wakeState: "responding" });
-    setTimeout(() => set({ wakeState: "idle" }), 1500);
-    return reply;
+    try {
+      const r = await fetch(`${API}/api/chat`, {
+        method: "POST",
+        headers: authHeaders(token),
+        body: JSON.stringify({ message: text }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ reply: "Error contacting JARVIS." }));
+        const reply = err.detail || err.reply || "Something went wrong.";
+        get().appendChat({ role: "assistant", text: reply, timestamp: Date.now() });
+        set({ wakeState: "idle" });
+        return reply;
+      }
+      const data = await r.json();
+      const reply = data.reply || "";
+      get().appendChat({ role: "assistant", text: reply, timestamp: Date.now() });
+      set({ wakeState: "responding" });
+      setTimeout(() => set({ wakeState: "idle" }), 1500);
+      return reply;
+    } catch {
+      const reply = "Network error — check connection.";
+      get().appendChat({ role: "assistant", text: reply, timestamp: Date.now() });
+      set({ wakeState: "idle" });
+      return reply;
+    }
   },
 
   appendChat: (turn) => set((s) => ({ chat: [...s.chat, turn] })),

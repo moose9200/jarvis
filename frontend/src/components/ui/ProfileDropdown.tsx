@@ -12,20 +12,19 @@ export function ProfileDropdown({ onOpenIntegrations, onOpenCustomizer }: Props)
   const token = useJarvisStore((s) => s.token);
   const logout = useJarvisStore((s) => s.logout);
   const [open, setOpen] = useState(false);
-  const [userEmail, setUserEmail] = useState(user?.email || "");
   const ref = useRef<HTMLDivElement>(null);
 
-  // Fetch /me if we have a token but no user email
-  useEffect(() => {
-    if (token && !userEmail) {
-      fetch(`${import.meta.env.VITE_API_BASE || ""}/api/users/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((r) => r.json())
-        .then((d) => d.email && setUserEmail(d.email))
-        .catch(() => {});
+  // Decode email from JWT payload (base64) — instant, no network call
+  const userEmail = (() => {
+    if (user?.email) return user.email;
+    if (!token) return "";
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      return payload.email || "";
+    } catch {
+      return "";
     }
-  }, [token, userEmail]);
+  })();
 
   // Close on outside click
   useEffect(() => {
@@ -37,7 +36,6 @@ export function ProfileDropdown({ onOpenIntegrations, onOpenCustomizer }: Props)
   }, []);
 
   const initial = userEmail ? userEmail[0].toUpperCase() : "J";
-  const displayEmail = userEmail || "Loading...";
 
   return (
     <div ref={ref} className="relative">
@@ -68,9 +66,9 @@ export function ProfileDropdown({ onOpenIntegrations, onOpenCustomizer }: Props)
                 </div>
                 <div className="min-w-0">
                   <div className="text-white text-sm font-semibold truncate">
-                    {displayEmail.split("@")[0]}
+                    {userEmail ? userEmail.split("@")[0] : "Account"}
                   </div>
-                  <div className="text-white/40 text-xs truncate">{displayEmail}</div>
+                  <div className="text-white/40 text-xs truncate">{userEmail || "—"}</div>
                 </div>
               </div>
             </div>

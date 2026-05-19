@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { motion, useDragControls } from "framer-motion";
 import { useJarvisStore } from "../../store/jarvisStore";
 
 const MIN_W = 320;
@@ -16,15 +16,19 @@ export function DraggableChat() {
   const [size, setSize] = useState({ w: DEFAULT_W, h: DEFAULT_H });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const constraintRef = useRef<HTMLDivElement>(null);
-  const resizing = useRef(false);
-  const resizeStart = useRef({ x: 0, y: 0, w: DEFAULT_W, h: DEFAULT_H });
+
+  // framer-motion drag controls — drag only starts from the header handle
+  const dragControls = useDragControls();
+
+  // Resize tracking (completely isolated from drag)
+  const resizeStartRef = useRef({ x: 0, y: 0, w: DEFAULT_W, h: DEFAULT_H });
 
   // Auto-scroll on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chat, busy]);
 
-  // Keyboard shortcut: Cmd+K / Ctrl+K focuses input
+  // ⌘K / Ctrl+K: focus input
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -46,47 +50,55 @@ export function DraggableChat() {
     try { await sendChat(v); } finally { setBusy(false); }
   };
 
-  // Resize pointer handlers
-  const onResizeStart = (e: React.PointerEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    resizing.current = true;
-    resizeStart.current = { x: e.clientX, y: e.clientY, w: size.w, h: size.h };
+  // Resize: starts from the corner handle, entirely independent of drag
+  const onResizePointerDown = (e: React.PointerEvent) => {
+    e.stopPropagation(); // do NOT let this bubble to the motion.div
+    e.currentTarget.setPointerCapture(e.pointerId); // capture on the handle element itself
 
-    const onMove = (ev: PointerEvent) => {
-      if (!resizing.current) return;
-      const dw = ev.clientX - resizeStart.current.x;
-      const dh = ev.clientY - resizeStart.current.y;
-      setSize({
-        w: Math.max(MIN_W, resizeStart.current.w + dw),
-        h: Math.max(MIN_H, resizeStart.current.h + dh),
-      });
+    resizeStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      w: size.w,
+      h: size.h,
     };
-    const onUp = () => {
-      resizing.current = false;
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
+  };
+
+  const onResizePointerMove = (e: React.PointerEvent) => {
+    if (!(e.buttons & 1)) return; // only while primary button held
+    const { x, y, w, h } = resizeStartRef.current;
+    setSize({
+      w: Math.max(MIN_W, w + e.clientX - x),
+      h: Math.max(MIN_H, h + e.clientY - y),
+    });
+  };
+
+  const onResizePointerUp = (e: React.PointerEvent) => {
+    e.currentTarget.releasePointerCapture(e.pointerId);
   };
 
   return (
-    // Full-screen constraint layer (invisible, pointer-events-none for backdrop)
+    // Full-screen constraint layer
     <div ref={constraintRef} className="absolute inset-0 pointer-events-none">
       <motion.div
         drag
+        dragControls={dragControls}
+        dragListener={false}       // CRITICAL: only start drag via dragControls.start()
         dragConstraints={constraintRef}
         dragMomentum={false}
         dragElastic={0}
-        dragListener={!resizing.current}
-        // Start roughly centered
         initial={{ x: 0, y: 0 }}
         style={{ width: size.w, height: minimized ? "auto" : size.h }}
         className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-auto bg-black/70 backdrop-blur-md border border-jcyan/50 rounded-xl flex flex-col shadow-2xl shadow-black/60"
       >
         {/* ── Header / drag handle ── */}
-        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-jcyan/30 cursor-grab active:cursor-grabbing select-none shrink-0 rounded-t-xl">
+        <div
+          onPointerDown={(e) => {
+            // Only start drag from the header bar (not buttons inside it)
+            if ((e.target as HTMLElement).closest("button")) return;
+            dragControls.start(e);
+          }}
+          className="flex items-center gap-2 px-4 py-2.5 border-b border-jcyan/30 cursor-grab active:cursor-grabbing select-none shrink-0 rounded-t-xl bg-black/20"
+        >
           {/* Traffic lights */}
           <div className="flex items-center gap-1.5">
             <button
@@ -105,7 +117,6 @@ export function DraggableChat() {
             J·A·R·V·I·S
           </span>
 
-          {/* Wake state indicator */}
           <WakeIndicator />
         </div>
 
@@ -130,7 +141,7 @@ export function DraggableChat() {
                     </div>
                   )}
                   <div
-                    className={`max-w-[80%] px-3 py-2 rounded-xl text-sm leading-relaxed ${
+                    className={`max-w-[80%] px-3 py-2 rounded-xl text-sm leading-relaxed whitespace-pre-wrap break-words ${
                       t.role === "user"
                         ? "bg-jcyan/15 border border-jcyan/30 text-white rounded-tr-sm"
                         : "bg-white/5 border border-white/10 text-white/90 rounded-tl-sm"
@@ -182,16 +193,24 @@ export function DraggableChat() {
           </>
         )}
 
-        {/* ── Resize handle (bottom-right corner) ── */}
+        {/* ── Resize handle — uses pointer capture, completely isolated from drag ── */}
         {!minimized && (
           <div
-            onPointerDown={onResizeStart}
-            className="absolute bottom-0 right-0 w-5 h-5 cursor-nwse-resize flex items-center justify-center opacity-30 hover:opacity-70 transition-opacity"
+            onPointerDown={onResizePointerDown}
+            onPointerMove={onResizePointerMove}
+            onPointerUp={onResizePointerUp}
+            className="absolute bottom-0 right-0 w-6 h-6 cursor-nwse-resize flex items-center justify-center"
             title="Drag to resize"
           >
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" className="text-jcyan">
-              <path d="M0 10 L10 0 L10 10 Z" opacity="0.5" />
-              <path d="M4 10 L10 4 L10 10 Z" />
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 10 10"
+              className="text-jcyan/40 hover:text-jcyan/80 transition-colors"
+              fill="currentColor"
+            >
+              <path d="M2 10 L10 2 L10 10 Z" opacity="0.4" />
+              <path d="M6 10 L10 6 L10 10 Z" />
             </svg>
           </div>
         )}
@@ -203,20 +222,22 @@ export function DraggableChat() {
 function WakeIndicator() {
   const wakeState = useJarvisStore((s) => s.wakeState);
   const COLOR = {
-    idle: "bg-white/20",
-    listening: "bg-green-400",
+    idle:       "bg-white/20",
+    listening:  "bg-green-400",
     processing: "bg-yellow-400",
     responding: "bg-jcyan",
   }[wakeState];
   const LABEL = {
-    idle: "Idle",
-    listening: "Listening",
+    idle:       "Idle",
+    listening:  "Listening",
     processing: "Thinking",
     responding: "Speaking",
   }[wakeState];
   return (
     <div className="flex items-center gap-1.5">
-      <span className={`w-2 h-2 rounded-full ${COLOR} ${wakeState !== "idle" ? "animate-pulse" : ""}`} />
+      <span
+        className={`w-2 h-2 rounded-full ${COLOR} ${wakeState !== "idle" ? "animate-pulse" : ""}`}
+      />
       <span className="text-white/30 text-[10px] uppercase tracking-wider">{LABEL}</span>
     </div>
   );
