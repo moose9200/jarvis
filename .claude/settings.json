@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /Users/hemant/jarvis && git add docs/BUILD_PROGRESS.md CLAUDE.md && git commit -m \"auto: checkpoint on session end\" 2>/dev/null || true",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}
