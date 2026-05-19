@@ -19,6 +19,7 @@ export function CalendarPanel() {
       corner="tl"
       onRefresh={fetchFeed}
       badge={events.length || undefined}
+      panelKey="calendar"
     >
       {events.length === 0 && (
         <div className="flex flex-col items-center justify-center py-6 gap-2">

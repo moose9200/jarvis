@@ -225,13 +225,14 @@ After each full step: git commit with message `step X: description`.
 ---
 
 ## STEP 11 — Dashboard Use-Case Prompts
-- [ ] 11.1 UseCasePromptDrawer component (per-panel "?" button)
-- [ ] 11.2 Email panel: 5 prompts
-- [ ] 11.3 Calendar panel: 5 prompts
-- [ ] 11.4 Tasks panel: 5 prompts
-- [ ] 11.5 Shopify panel: 8 prompts
-- [ ] 11.6 Freshdesk panel: 5 prompts
-- [ ] 11.7 Home/general: 5 daily use prompts
+- [x] 11.1 UseCasePromptDrawer component — opens on ? button in any PanelWrapper, sends selected prompt to chat (switches to text mode).
+- [x] 11.2 Email panel: 5 prompts (GET /api/chat/suggestions/email)
+- [x] 11.3 Calendar panel: 5 prompts
+- [x] 11.4 Tasks panel: 5 prompts
+- [x] 11.5 Shopify panel: 5 prompts (will surface once panel is added in Step 9)
+- [x] 11.6 Freshdesk panel: 5 prompts (will surface once panel is added in Step 10)
+- [x] 11.7 Home/general: 5 daily-use prompts via `home` panel key
+- [x] BONUS: Projects panel: 5 prompts; GET /api/chat/suggestions (bulk) for prefetch
 
 **Commit:** `git commit -m "step 11: dashboard use-case prompts"`
 

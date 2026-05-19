@@ -18,6 +18,7 @@ export function EmailPanel() {
       corner="tr"
       onRefresh={fetchFeed}
       badge={total || undefined}
+      panelKey="email"
     >
       {emails.length === 0 && messages.length === 0 && (
         <div className="flex flex-col items-center justify-center py-6 gap-2">

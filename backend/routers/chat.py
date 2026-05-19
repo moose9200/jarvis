@@ -121,6 +121,76 @@ def quick_actions(current_user: User = Depends(get_current_user)):
     return {"actions": QUICK_ACTIONS}
 
 
+# Per-panel "Suggestions" prompts (Step 11). Frontend renders these as a
+# drawer under a ❓ button on each panel. Polished, ready-to-use prompts.
+PANEL_SUGGESTIONS = {
+    "email": [
+        "Summarize all unread emails in one paragraph.",
+        "Which emails need a reply today? List sender + why it matters.",
+        "Draft replies to my top 3 priority emails. Show each for approval.",
+        "Flag any emails I've been ignoring too long.",
+        "Anything in my inbox that could be a legal or financial risk?",
+    ],
+    "calendar": [
+        "Brief me for my next meeting — attendees, context, what to know.",
+        "What's eating most of my time this week? Any patterns?",
+        "I need 2 hours of focused work today — best slot?",
+        "Which meetings this week could be an email instead?",
+        "Any conflicts or double bookings I should know about?",
+    ],
+    "tasks": [
+        "What's my single most important task today and why?",
+        "Which tasks are overdue? What should I do about each?",
+        "Break the top task into smaller steps I can action today.",
+        "What on my task list can I delegate? Draft delegation messages.",
+        "What tasks haven't moved in a week? Should I drop them?",
+    ],
+    "projects": [
+        "Status update on every active project — one line each.",
+        "Which project is most behind schedule? What's blocking it?",
+        "Which project should I personally focus on this week?",
+        "Anything that needs a decision from me right now?",
+        "End-of-week summary: what shipped, what slipped.",
+    ],
+    "shopify": [
+        "How is my store performing this week vs last week?",
+        "Top 3 selling products this week and what's driving them?",
+        "Which products should I restock urgently?",
+        "Best promotion + discount combo to maximize revenue?",
+        "Customers who spent over $500 but haven't ordered in 30 days.",
+    ],
+    "freshdesk": [
+        "What are my customers most frustrated about this week?",
+        "Tickets that have waited too long? Who's affected?",
+        "Draft a reply to my most urgent open ticket.",
+        "What's my team's support response time looking like?",
+        "Any recurring complaints I should fix at the product level?",
+    ],
+    "home": [
+        "Good morning — give me my complete daily brief.",
+        "What are the 3 most important things I need to do today?",
+        "Anything on fire right now that needs my immediate attention?",
+        "What decisions am I avoiding that I should make today?",
+        "End-of-day review — what got done, what's still open, tomorrow's priority?",
+    ],
+}
+
+
+@router.get("/chat/suggestions/{panel}")
+def panel_suggestions(panel: str, current_user: User = Depends(get_current_user)):
+    """Pre-built prompts for a given dashboard panel. Returns 404 if the
+    panel is unknown so the frontend can hide the ❓ button gracefully."""
+    if panel not in PANEL_SUGGESTIONS:
+        raise HTTPException(404, f"No suggestions for panel: {panel}")
+    return {"panel": panel, "prompts": PANEL_SUGGESTIONS[panel]}
+
+
+@router.get("/chat/suggestions")
+def all_panel_suggestions(current_user: User = Depends(get_current_user)):
+    """Bulk fetch — frontend can prefetch on app load."""
+    return {"panels": PANEL_SUGGESTIONS}
+
+
 @router.get("/chat/personalities")
 def personalities(current_user: User = Depends(get_current_user)):
     """All available personality modes + their style descriptors."""

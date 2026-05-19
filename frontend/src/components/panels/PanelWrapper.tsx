@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { ReactNode, useState } from "react";
+import { UseCasePromptDrawer } from "./UseCasePromptDrawer";
 
 interface Props {
   title: string;
@@ -8,11 +9,17 @@ interface Props {
   corner: "tl" | "tr" | "bl" | "br";
   onRefresh?: () => void;
   badge?: string | number;
+  /** If set, a ❓ button appears in the header. Clicking opens the Use-Case
+   *  Prompt Drawer with prompts fetched from /api/chat/suggestions/{panelKey}. */
+  panelKey?: string;
 }
 
-export function PanelWrapper({ title, icon, children, corner, onRefresh, badge }: Props) {
+export function PanelWrapper({
+  title, icon, children, corner, onRefresh, badge, panelKey,
+}: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   const align =
     corner === "tl" ? "col-start-1 row-start-1"
@@ -33,20 +40,32 @@ export function PanelWrapper({ title, icon, children, corner, onRefresh, badge }
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4 }}
-      className={`${align} pointer-events-auto bg-black/50 backdrop-blur-sm border border-jcyan/30 rounded-xl overflow-hidden flex flex-col transition-all`}
+      className={`${align} relative pointer-events-auto bg-black/50 backdrop-blur-sm border border-jcyan/30 rounded-xl overflow-visible flex flex-col transition-all`}
     >
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-jcyan/15 bg-jcyan/3 shrink-0">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-jcyan/15 bg-jcyan/3 shrink-0 rounded-t-xl">
         {icon && <span className="text-sm">{icon}</span>}
         <span className="flex-1 text-xs uppercase tracking-widest text-jcyan font-bold truncate">
           {title}
         </span>
 
-        {/* Badge (item count) */}
         {badge !== undefined && (
           <span className="text-[10px] text-jcyan/60 bg-jcyan/10 rounded px-1.5 py-0.5 font-mono">
             {badge}
           </span>
+        )}
+
+        {/* Suggestions (Step 11) */}
+        {panelKey && (
+          <button
+            onClick={() => setShowSuggestions((v) => !v)}
+            title={`Ask JARVIS about ${title}`}
+            className={`transition-colors text-xs ${
+              showSuggestions ? "text-jcyan" : "text-white/20 hover:text-jcyan"
+            }`}
+          >
+            ?
+          </button>
         )}
 
         {/* Refresh */}
@@ -67,7 +86,7 @@ export function PanelWrapper({ title, icon, children, corner, onRefresh, badge }
           </button>
         )}
 
-        {/* Collapse toggle */}
+        {/* Collapse */}
         <button
           onClick={() => setCollapsed((v) => !v)}
           title={collapsed ? "Expand" : "Collapse"}
@@ -77,7 +96,17 @@ export function PanelWrapper({ title, icon, children, corner, onRefresh, badge }
         </button>
       </div>
 
-      {/* Body — AnimatePresence lets framer-motion measure real height */}
+      {/* Suggestion drawer overlay */}
+      {panelKey && (
+        <UseCasePromptDrawer
+          panel={panelKey}
+          title={title}
+          open={showSuggestions}
+          onClose={() => setShowSuggestions(false)}
+        />
+      )}
+
+      {/* Body */}
       <AnimatePresence initial={false}>
         {!collapsed && (
           <motion.div

@@ -26,6 +26,7 @@ export function TaskPanel() {
       corner="bl"
       onRefresh={fetchFeed}
       badge={tasks.length || undefined}
+      panelKey="tasks"
     >
       {tasks.length === 0 && (
         <div className="flex flex-col items-center justify-center py-6 gap-2">

@@ -21,6 +21,7 @@ export function ProjectPanel() {
       corner="br"
       onRefresh={fetchFeed}
       badge={projects.length || undefined}
+      panelKey="projects"
     >
       {projects.length === 0 && (
         <div className="flex flex-col items-center justify-center py-6 gap-2">
