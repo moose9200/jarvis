@@ -19,7 +19,7 @@ from slowapi.errors import RateLimitExceeded
 from database import Base, engine  # noqa: F401 — Base re-exported for legacy callers
 from rate_limit import limiter
 import models  # noqa
-from routers import auth, feed, email_intelligence, chat, users
+from routers import auth, chat, email_intelligence, feed, tokens, users
 
 # Schema is owned by Alembic. Migrations run via `alembic upgrade head` from
 # the Dockerfile CMD (see backend/Dockerfile) — never auto-create here.
@@ -47,6 +47,7 @@ app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(feed.router, prefix="/api", tags=["feed"])
 app.include_router(email_intelligence.router, prefix="/api", tags=["email"])
 app.include_router(chat.router, prefix="/api", tags=["chat"])
+app.include_router(tokens.router, prefix="/api", tags=["tokens"])
 
 
 @app.get("/api/health")

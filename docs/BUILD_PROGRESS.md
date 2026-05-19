@@ -4,8 +4,8 @@
 
 ## Current Status
 **Last session:** 2026-05-20  
-**Last completed:** Step 2 — V2 database models + Alembic 0002 migration
-**Next task:** Step 21 — Provider-agnostic AI abstraction layer
+**Last completed:** Step 21 (provider abstraction) + Step 3 (tier system + usage tracking + cache + /api/tokens/*)
+**Next task:** Step 4 — BYOAK settings endpoint + frontend AI Keys tab
 **Blocked by:** Nothing. (Step 6 multimodal upload will need user to set S3_* env vars from USER_TASKS #9.)
 
 ---
@@ -57,25 +57,25 @@ After each full step: git commit with message `step X: description`.
 ---
 
 ## STEP 21 — Provider-Agnostic AI Layer (build before Step 3)
-- [ ] 21.1 backend/ai/providers/base.py (AIProvider ABC, AIResponse, AIChunk)
-- [ ] 21.2 backend/ai/providers/anthropic_provider.py
-- [ ] 21.3 backend/ai/providers/openai_provider.py (covers OpenAI + Groq + Mistral)
-- [ ] 21.4 backend/ai/providers/google_provider.py
-- [ ] 21.5 backend/ai/providers/factory.py (get_provider factory)
-- [ ] 21.6 backend/ai/tiers.py (TIER_MODELS + TIER_COSTS for all providers)
-- [ ] 21.7 Update JarvisAI class to use abstraction (replace direct anthropic import)
-- [ ] 21.8 Add provider-specific deps to requirements.txt (openai, google-generativeai)
+- [x] 21.1 backend/ai/providers/base.py (AIProvider ABC, AIResponse, AIChunk)
+- [x] 21.2 backend/ai/providers/anthropic_provider.py
+- [x] 21.3 backend/ai/providers/openai_provider.py (covers OpenAI + Groq + Mistral)
+- [x] 21.4 backend/ai/providers/google_provider.py (lazy import)
+- [x] 21.5 backend/ai/providers/factory.py (get_provider factory)
+- [x] 21.6 backend/ai/tiers.py (TIER_MODELS + TIER_COSTS for all providers)
+- [x] 21.7 Update JarvisAI class to use abstraction (replace direct anthropic import) — renamed claude_client.py → jarvis_ai.py, deleted legacy file
+- [x] 21.8 Add provider-specific deps to requirements.txt (openai>=1.40, google-generativeai>=0.8, anthropic>=0.40)
 
 **Commit:** `git commit -m "step 21: provider-agnostic AI abstraction layer"`
 
 ---
 
 ## STEP 3 — Intelligence Tier System
-- [ ] 3.1 Tier config wired through provider abstraction (not direct Anthropic)
-- [ ] 3.2 Extended thinking enabled per provider (Anthropic thinking, o3 reasoning)
-- [ ] 3.3 Token usage tracked after every complete() call → TokenUsage table
-- [ ] 3.4 Prompt caching on system prompt (Anthropic: cache_control ephemeral)
-- [ ] 3.5 Token usage returned in chat response: {reply, usage: {input, output, cost_usd}}
+- [x] 3.1 Tier config wired through provider abstraction (not direct Anthropic)
+- [x] 3.2 Extended thinking plumbed (Anthropic thinking_budget param; openai/o3 reasoning is internal; Sonnet 4.5 thinking off by default in `intelligent`, on for `scientist`)
+- [x] 3.3 Token usage tracked after every complete() call → TokenUsage table
+- [x] 3.4 Prompt caching on system prompt (Anthropic: cache_control ephemeral) — verified cache_read=1197 on 2nd request
+- [x] 3.5 Token usage returned in chat response: {reply, usage: {provider, model, input, output, cache_read, cache_write, thinking, cost_usd}}
 
 **Commit:** `git commit -m "step 3: intelligence tier system with thinking"`
 
@@ -83,9 +83,9 @@ After each full step: git commit with message `step X: description`.
 
 ## STEP 4 — BYOAK (Bring Your Own API Key)
 - [ ] 4.1 Settings endpoint: PUT /api/settings/api-keys (all 5 providers)
-- [ ] 4.2 JarvisAI reads user's provider + key from UserSettings (decrypted)
-- [ ] 4.3 Graceful 402 if no API key configured for chosen provider
-- [ ] 4.4 GET /api/tokens/today, /api/tokens/history, /api/tokens/session
+- [x] 4.2 JarvisAI reads user's provider + key from UserSettings (decrypted), falls back to env
+- [x] 4.3 Graceful 402 if no API key configured for chosen provider (NoAPIKeyError → 402)
+- [x] 4.4 GET /api/tokens/today, /api/tokens/history, /api/tokens/session
 
 **Commit:** `git commit -m "step 4: BYOAK multi-provider support"`
 
@@ -291,6 +291,17 @@ _Add notes here as you make architecture decisions or discover issues_
 - 2026-05-20: Spec written. Provider-agnostic AI layer required — no direct Anthropic imports in business logic.
 - 2026-05-20: BYOAK model confirmed. Users bring their own API key (Anthropic/OpenAI/Groq/Mistral/Google).
 - 2026-05-20: Default personality = caveman (saves ~60% output tokens for users).
+- 2026-05-20: Steps 21 + 3 complete (+ 3 of 4 BYOAK sub-tasks). Notes:
+  - claude_client.py REMOVED. New entrypoint: backend/ai/jarvis_ai.py (JarvisAI class).
+  - AIProvider abstraction in backend/ai/providers/{base,anthropic_provider,openai_provider,google_provider,factory}.py. OpenAICompatibleProvider covers OpenAI + Groq + Mistral via base_url.
+  - Tier system in backend/ai/tiers.py with TIER_MODELS (model + thinking_budget + max_tokens) and TIER_COSTS (USD/1M) for all 5 providers x 3 tiers.
+  - Thinking budget is plumbed but OFF for `intelligent` tier (saves cost) — ON for `scientist`.
+  - Prompt caching: system prompt wrapped with cache_control: ephemeral. Verified cache_read=1197 tokens on 2nd request.
+  - TokenUsage row written after every model call. Multi-turn tool loops accumulate into one usage block returned in the chat response.
+  - New endpoints under /api/tokens: today / history?days=N / session?limit=N. Today endpoint reports budget headroom.
+  - chat now returns {"reply": str, "usage": {provider, model, input, output, cache_read, cache_write, thinking, cost_usd}}. Frontend is backward-compat (ignores usage if unread).
+  - NoAPIKeyError → 402 with friendly "Add yours in Settings → AI Keys" message.
+  - tests/test_chat.py updated for JarvisAI mock target.
 - 2026-05-20: Step 2 complete. Notes:
   - UserSettings carries BYOAK keys for 5 providers (anthropic, openai, groq, mistral, google) + elevenlabs + github PAT. All *_encrypted columns must be wrapped with crypto.{encrypt,decrypt}.
   - FileUpload added `extracted_text` and `extra` fields beyond the spec to capture PDF/CSV/transcript output and arbitrary processor metadata.
