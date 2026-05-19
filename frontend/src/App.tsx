@@ -12,6 +12,8 @@ import { AuthPage } from "./components/auth/AuthPage";
 import { ToastStack } from "./components/ui/Toast";
 import { ProfileDropdown } from "./components/ui/ProfileDropdown";
 import { DashboardCustomizer } from "./components/ui/DashboardCustomizer";
+import { SettingsPage } from "./components/settings/SettingsPage";
+import { TokenMonitor } from "./components/settings/TokenMonitor";
 import { useJarvisStore } from "./store/jarvisStore";
 import { useWakeWord } from "./hooks/useWakeWord";
 import { useVoice } from "./hooks/useVoice";
@@ -46,6 +48,8 @@ export default function App() {
 
   const [showIntegrations, setShowIntegrations] = useState(false);
   const [showCustomizer, setShowCustomizer] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showTokens, setShowTokens] = useState(false);
 
   // All hooks before conditional return
   useEffect(() => {
@@ -119,10 +123,18 @@ export default function App() {
           <ModeToggle />
         </div>
 
-        {/* Right: Profile dropdown */}
+        {/* Right: Token monitor + Profile dropdown */}
+        <button
+          onClick={() => setShowTokens(true)}
+          title="Token usage + cost"
+          className="px-2.5 py-1.5 rounded-lg border border-jcyan/30 bg-jcyan/5 text-jcyan text-xs font-bold uppercase tracking-widest hover:bg-jcyan/15 transition-colors"
+        >
+          $·
+        </button>
         <ProfileDropdown
           onOpenIntegrations={() => setShowIntegrations(true)}
           onOpenCustomizer={() => setShowCustomizer(true)}
+          onOpenSettings={() => setShowSettings(true)}
         />
       </div>
 
@@ -153,6 +165,8 @@ export default function App() {
         open={showCustomizer}
         onClose={() => setShowCustomizer(false)}
       />
+      <SettingsPage open={showSettings} onClose={() => setShowSettings(false)} />
+      <TokenMonitor open={showTokens} onClose={() => setShowTokens(false)} />
 
       {/* ── Toast notifications ──────────────────────────────────────────────── */}
       <ToastStack />

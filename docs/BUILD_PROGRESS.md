@@ -4,9 +4,9 @@
 
 ## Current Status
 **Last session:** 2026-05-20  
-**Last completed:** Step 4 (BYOAK backend — settings + api-keys + test-key + preferences + active-provider)
-**Next task:** Step 23 — Local dev setup (Makefile, seed data, mock OAuth) — OR Step 5 streaming chat
-**Blocked by:** Nothing. (Step 6 multimodal upload will need user to set S3_* env vars from USER_TASKS #9. Frontend Settings UI is Step 13.)
+**Last completed:** Step 13 (Settings page, 6 tabs) + Step 12 (Token Monitor slide-out) — full frontend wiring done.
+**Next task:** Step 11 (dashboard use-case prompts) OR Step 14 (founder intelligence features)
+**Blocked by:** Nothing autonomously. Several features blocked-on-user for credentials (see USER_TASKS.txt): Shopify/Freshdesk integrations (Step 9/10), Stripe billing (Step 22), S3 file uploads (Step 6 backend works, needs S3 keys to be useful).
 
 ---
 
@@ -164,25 +164,25 @@ After each full step: git commit with message `step X: description`.
 ---
 
 ## STEP 13 — Settings Page (Frontend)
-- [ ] 13.1 /settings route in App.tsx
-- [ ] 13.2 Tab 1: AI & Intelligence (tier, personality, response length, budget)
-- [ ] 13.3 Tab 2: API Keys (all 5 providers, test buttons, non-technical copy)
-- [ ] 13.4 Tab 3: About Me (context fields, team members)
-- [ ] 13.5 Tab 4: Integrations (existing + Shopify + Freshdesk)
-- [ ] 13.6 Tab 5: GitHub (repo URL + PAT)
-- [ ] 13.7 Tab 6: Account (change password, delete account, export data)
+- [x] 13.1 Settings modal opened from ProfileDropdown → Settings menu item (overlay modal, not route — fits the dashboard model better)
+- [x] 13.2 AI tab: active provider cards (gated on key presence), 3 tier cards, 6 personality pills, response length toggle, daily budget + alert %
+- [x] 13.3 API Keys tab: 5 providers + ElevenLabs, masked previews, Save/Test/Remove per row
+- [x] 13.4 About Me tab: about_me, communication_style, priorities, business_context (autosave on blur), team_members read-only display
+- [x] 13.5 Integrations tab: points back to existing IntegrationsModal (already production-ready)
+- [x] 13.6 GitHub tab: repo URL + PAT (KeyRow reused)
+- [x] 13.7 Account tab: Sign Out works; Change Password / Export / Delete are stubs marked "pending"
 
 **Commit:** `git commit -m "step 13: settings page (6 tabs)"`
 
 ---
 
 ## STEP 12 — Token Monitor UI
-- [ ] 12.1 GET /api/tokens/dashboard endpoint
-- [ ] 12.2 TokenMonitor slide-out panel (right side of chat)
-- [ ] 12.3 Tier selector cards in monitor (Eco/Intelligent/Scientist with cost)
-- [ ] 12.4 Session + daily usage progress bar (green/yellow/red)
-- [ ] 12.5 7-day sparkline chart (recharts)
-- [ ] 12.6 Budget settings wired to UserSettings
+- [x] 12.1 /api/tokens/today + /api/tokens/history + /api/tokens/session (built in Step 3)
+- [x] 12.2 TokenMonitor slide-out panel (right side, triggered by $ button in top bar)
+- [x] 12.3 Tier selector lives in Settings → AI (one source of truth)
+- [x] 12.4 Daily usage progress bar (green < 60%, yellow < 90%, red ≥ 90%)
+- [x] 12.5 7-day sparkline — inline SVG gradient polyline (no recharts dep)
+- [x] 12.6 Budget settings wired to UserSettings via Settings → AI tab
 
 **Commit:** `git commit -m "step 12: token monitor UI"`
 

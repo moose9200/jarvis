@@ -5,9 +5,10 @@ import { useJarvisStore } from "../../store/jarvisStore";
 interface Props {
   onOpenIntegrations: () => void;
   onOpenCustomizer: () => void;
+  onOpenSettings?: () => void;
 }
 
-export function ProfileDropdown({ onOpenIntegrations, onOpenCustomizer }: Props) {
+export function ProfileDropdown({ onOpenIntegrations, onOpenCustomizer, onOpenSettings }: Props) {
   const user = useJarvisStore((s) => s.user);
   const token = useJarvisStore((s) => s.token);
   const logout = useJarvisStore((s) => s.logout);
@@ -75,8 +76,16 @@ export function ProfileDropdown({ onOpenIntegrations, onOpenCustomizer }: Props)
 
             {/* Menu items */}
             <div className="py-1">
+              {onOpenSettings && (
+                <MenuBtn
+                  icon="⚙"
+                  label="Settings"
+                  desc="AI, keys, persona"
+                  onClick={() => { setOpen(false); onOpenSettings(); }}
+                />
+              )}
               <MenuBtn
-                icon="⚙"
+                icon="🔌"
                 label="Integrations"
                 desc="Connect services"
                 onClick={() => { setOpen(false); onOpenIntegrations(); }}
@@ -88,7 +97,7 @@ export function ProfileDropdown({ onOpenIntegrations, onOpenCustomizer }: Props)
                 onClick={() => { setOpen(false); onOpenCustomizer(); }}
               />
               <MenuBtn
-                icon="🔑"
+                icon="⌨"
                 label="Keyboard Shortcuts"
                 desc="⌘K chat · Esc close"
                 onClick={() => setOpen(false)}
