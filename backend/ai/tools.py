@@ -144,70 +144,55 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
 ]
 
 
-async def dispatch(name: str, inputs: Dict[str, Any], db: Session) -> Any:
+async def dispatch(name: str, inputs: Dict[str, Any], db: Session, user_id: int = None) -> Any:
+    def _c(cls):
+        return cls(db, user_id)
+
     if name == "get_calendar_events":
         days = inputs.get("days", 1)
-        gcal = GoogleCalendarConnector(db)
-        ocal = OutlookCalendarConnector(db)
-        gcal_events = await gcal.fetch(days=days)
-        ocal_events = await ocal.fetch(days=days)
+        gcal_events = await _c(GoogleCalendarConnector).fetch(days=days)
+        ocal_events = await _c(OutlookCalendarConnector).fetch(days=days)
         return gcal_events + ocal_events
 
     elif name == "get_priority_emails":
         limit = inputs.get("limit", 10)
-        gmail = GmailConnector(db)
-        outlook = OutlookMailConnector(db)
-        gmail_emails = await gmail.fetch(max_results=limit)
-        outlook_emails = await outlook.fetch(top=limit)
+        gmail_emails = await _c(GmailConnector).fetch(max_results=limit)
+        outlook_emails = await _c(OutlookMailConnector).fetch(top=limit)
         all_emails = gmail_emails + outlook_emails
-        scorer = EmailScorer(db)
+        scorer = EmailScorer(db, user_id)
         scored = sorted(all_emails, key=lambda e: scorer.score(e), reverse=True)
         return scored[:limit]
 
     elif name == "get_slack_messages":
-        connector = SlackConnector(db)
-        return await connector.fetch()
+        return await _c(SlackConnector).fetch()
 
     elif name == "get_teams_messages":
-        connector = TeamsConnector(db)
-        return await connector.fetch()
+        return await _c(TeamsConnector).fetch()
 
     elif name == "get_whatsapp_messages":
-        connector = WhatsAppConnector(db)
-        return await connector.fetch()
+        return await _c(WhatsAppConnector).fetch()
 
     elif name == "get_github_notifications":
-        connector = GitHubConnector(db)
-        return await connector.fetch()
+        return await _c(GitHubConnector).fetch()
 
     elif name == "get_linear_issues":
-        connector = LinearConnector(db)
-        return await connector.fetch()
+        return await _c(LinearConnector).fetch()
 
     elif name == "get_jira_issues":
-        connector = JiraConnector(db)
-        return await connector.fetch()
+        return await _c(JiraConnector).fetch()
 
     elif name == "get_notion_tasks":
-        connector = NotionConnector(db)
-        return await connector.fetch()
+        return await _c(NotionConnector).fetch()
 
     elif name == "get_daily_plan":
-        gcal = GoogleCalendarConnector(db)
-        ocal = OutlookCalendarConnector(db)
-        gmail = GmailConnector(db)
-        outlook = OutlookMailConnector(db)
-        linear = LinearConnector(db)
-        jira = JiraConnector(db)
+        gcal_events = await _c(GoogleCalendarConnector).fetch(days=1)
+        ocal_events = await _c(OutlookCalendarConnector).fetch(days=1)
+        gmail_emails = await _c(GmailConnector).fetch(max_results=10)
+        outlook_emails = await _c(OutlookMailConnector).fetch(top=10)
+        linear_issues = await _c(LinearConnector).fetch()
+        jira_issues = await _c(JiraConnector).fetch()
 
-        gcal_events = await gcal.fetch(days=1)
-        ocal_events = await ocal.fetch(days=1)
-        gmail_emails = await gmail.fetch(max_results=10)
-        outlook_emails = await outlook.fetch(top=10)
-        linear_issues = await linear.fetch()
-        jira_issues = await jira.fetch()
-
-        scorer = EmailScorer(db)
+        scorer = EmailScorer(db, user_id)
         all_emails = gmail_emails + outlook_emails
         priority_emails = sorted(all_emails, key=lambda e: scorer.score(e), reverse=True)[:5]
 
@@ -221,11 +206,11 @@ async def dispatch(name: str, inputs: Dict[str, Any], db: Session) -> Any:
         to = inputs.get("to", "")
         subject = inputs.get("subject", "")
         body = inputs.get("body", "")
-        gmail = GmailConnector(db)
+        gmail = _c(GmailConnector)
         sent = await gmail.send(to=to, subject=subject, body=body)
         if sent:
             return {"sent": True, "via": "gmail", "to": to, "subject": subject}
-        outlook = OutlookMailConnector(db)
+        outlook = _c(OutlookMailConnector)
         sent = await outlook.send(to=to, subject=subject, body=body)
         if sent:
             return {"sent": True, "via": "outlook", "to": to, "subject": subject}
@@ -236,7 +221,7 @@ async def dispatch(name: str, inputs: Dict[str, Any], db: Session) -> Any:
         import os
         title = inputs.get("title", "")
         description = inputs.get("description", "")
-        linear = LinearConnector(db)
+        linear = _c(LinearConnector)
         tok = linear.access()
         if not tok:
             return {"error": "Linear not connected"}

@@ -24,12 +24,36 @@ interface Props {
 export function IntegrationsModal({ onClose }: Props) {
   const connectors = useJarvisStore((s) => s.connectors);
   const fetchConnectors = useJarvisStore((s) => s.fetchConnectors);
+  const token = useJarvisStore((s) => s.token);
+  const [disconnecting, setDisconnecting] = useState<string | null>(null);
 
   useEffect(() => {
     fetchConnectors();
   }, [fetchConnectors]);
 
   const connected = connectors.filter((c) => c.connected).length;
+
+  const disconnect = async (provider: string) => {
+    setDisconnecting(provider);
+    try {
+      await fetch(`${API}/api/auth/${provider}/disconnect`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      await fetchConnectors();
+    } finally {
+      setDisconnecting(null);
+    }
+  };
+
+  // For OAuth providers, we need to pass the token in the URL since we're doing a redirect
+  const connectUrl = (name: string) => {
+    if (!token) return `${API}/api/auth/${name}/start`;
+    return `${API}/api/auth/${name}/start?token=${token}`;
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
@@ -70,13 +94,24 @@ export function IntegrationsModal({ onClose }: Props) {
                   <div className="text-white font-medium text-sm">{meta.label}</div>
                   <div className="text-white/40 text-xs truncate">{meta.desc}</div>
                 </div>
+
                 {c.connected ? (
-                  <span className="text-[#00d4ff] text-xs font-bold uppercase tracking-wider shrink-0">
-                    ✓ On
-                  </span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[#00d4ff] text-xs font-bold uppercase tracking-wider">
+                      ✓ On
+                    </span>
+                    <button
+                      onClick={() => disconnect(c.name)}
+                      disabled={disconnecting === c.name}
+                      title="Disconnect"
+                      className="text-white/20 hover:text-red-400 text-xs transition-colors disabled:opacity-40"
+                    >
+                      {disconnecting === c.name ? "..." : "✕"}
+                    </button>
+                  </div>
                 ) : c.configured ? (
                   <a
-                    href={`${API}/api/auth/${c.name}/start`}
+                    href={connectUrl(c.name)}
                     className="shrink-0 px-3 py-1.5 text-xs font-bold uppercase tracking-wider border border-[#00d4ff]/50 text-[#00d4ff] rounded hover:bg-[#00d4ff]/10 transition-colors"
                   >
                     Connect
@@ -96,7 +131,7 @@ export function IntegrationsModal({ onClose }: Props) {
 
         {/* Footer */}
         <div className="px-6 py-3 border-t border-[#00d4ff]/20 text-white/30 text-xs">
-          OAuth flows open in this tab. After connecting, return here and refresh status.
+          OAuth flows open in this tab. After connecting, return here — status refreshes automatically.
         </div>
       </div>
     </div>

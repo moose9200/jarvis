@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Float, JSON, Boolean
+from sqlalchemy import Column, Integer, String, Text, DateTime, Float, JSON, Boolean, UniqueConstraint, ForeignKey
 from datetime import datetime
 from database import Base
 
@@ -13,8 +13,10 @@ class User(Base):
 
 class OAuthToken(Base):
     __tablename__ = "oauth_tokens"
+    __table_args__ = (UniqueConstraint("provider", "user_id", name="uq_oauth_provider_user"),)
     id = Column(Integer, primary_key=True)
-    provider = Column(String, index=True, unique=True)
+    provider = Column(String, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     access_token = Column(Text)
     refresh_token = Column(Text, nullable=True)
     expires_at = Column(DateTime, nullable=True)
@@ -25,6 +27,7 @@ class OAuthToken(Base):
 class EmailHistory(Base):
     __tablename__ = "email_history"
     id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     sender = Column(String, index=True)
     subject = Column(Text)
     received_at = Column(DateTime)
@@ -36,8 +39,10 @@ class EmailHistory(Base):
 
 class SenderProfile(Base):
     __tablename__ = "sender_profiles"
+    __table_args__ = (UniqueConstraint("sender", "user_id", name="uq_sender_user"),)
     id = Column(Integer, primary_key=True)
-    sender = Column(String, unique=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    sender = Column(String, index=True)
     relationship_weight = Column(Float, default=0.0)
     email_count = Column(Integer, default=0)
     reply_rate = Column(Float, default=0.0)
@@ -48,6 +53,7 @@ class SenderProfile(Base):
 class ConversationTurn(Base):
     __tablename__ = "conversation_turns"
     id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     role = Column(String)
     content = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -56,6 +62,7 @@ class ConversationTurn(Base):
 class ConversationSummary(Base):
     __tablename__ = "conversation_summaries"
     id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     summary = Column(Text)
     up_to_turn_id = Column(Integer)
     created_at = Column(DateTime, default=datetime.utcnow)

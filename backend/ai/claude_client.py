@@ -1,6 +1,6 @@
 import os
 import json
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 import anthropic
 
@@ -13,12 +13,13 @@ MAX_TOOL_TURNS = 8
 
 
 class JarvisClaude:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, user_id: Optional[int] = None):
         self.db = db
+        self.user_id = user_id
         self.client = anthropic.AsyncAnthropic(
             api_key=os.getenv("ANTHROPIC_API_KEY", "")
         )
-        self.memory = ConversationMemory(db)
+        self.memory = ConversationMemory(db, user_id)
 
     async def respond(self, user_message: str) -> str:
         self.memory.append("user", user_message)
@@ -43,14 +44,12 @@ class JarvisClaude:
             )
 
             if resp.stop_reason == "tool_use":
-                # Append assistant message
                 messages.append({"role": "assistant", "content": resp.content})
 
-                # Dispatch tools and collect results
                 tool_results = []
                 for block in resp.content:
                     if block.type == "tool_use":
-                        result = await dispatch(block.name, block.input, self.db)
+                        result = await dispatch(block.name, block.input, self.db, self.user_id)
                         tool_results.append({
                             "type": "tool_result",
                             "tool_use_id": block.id,
@@ -60,7 +59,6 @@ class JarvisClaude:
                 messages.append({"role": "user", "content": tool_results})
                 continue
 
-            # Extract text response
             text = ""
             for block in resp.content:
                 if hasattr(block, "text"):

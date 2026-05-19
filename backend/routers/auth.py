@@ -1,6 +1,7 @@
 import os
 import secrets
 from datetime import datetime, timedelta
+from typing import Optional
 from urllib.parse import urlencode
 
 import httpx
@@ -9,7 +10,8 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import OAuthToken
+from models import OAuthToken, User
+from routers.users import get_current_user
 
 router = APIRouter()
 
@@ -48,10 +50,14 @@ def _is_configured(name: str) -> bool:
     return all(os.getenv(k, "").strip() for k in PROVIDER_CREDENTIALS.get(name, []))
 
 
-def _save(db: Session, provider: str, access: str, refresh: str = None, ttl: int = 3600, scope: str = ""):
-    tok = db.query(OAuthToken).filter_by(provider=provider).first()
+def _save(db: Session, provider: str, access: str, refresh: str = None,
+          ttl: int = 3600, scope: str = "", user_id: Optional[int] = None):
+    q = db.query(OAuthToken).filter_by(provider=provider)
+    if user_id is not None:
+        q = q.filter_by(user_id=user_id)
+    tok = q.first()
     if not tok:
-        tok = OAuthToken(provider=provider)
+        tok = OAuthToken(provider=provider, user_id=user_id)
         db.add(tok)
     tok.access_token = access
     if refresh:
@@ -61,13 +67,21 @@ def _save(db: Session, provider: str, access: str, refresh: str = None, ttl: int
     db.commit()
 
 
+def _get_user_id(request: Request) -> Optional[int]:
+    """Retrieve user_id stored in session during OAuth start."""
+    return request.session.get("oauth_user_id")
+
+
 def _not_configured_redirect(provider: str):
     return RedirectResponse(f"{FRONTEND_URL}/?error=not_configured&provider={provider}")
 
 
 @router.get("/status")
-def status(db: Session = Depends(get_db)):
-    rows = {t.provider: t for t in db.query(OAuthToken).all()}
+def status(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    rows = {
+        t.provider
+        for t in db.query(OAuthToken).filter_by(user_id=current_user.id).all()
+    }
     out = []
     for name, display in PROVIDERS:
         out.append({
@@ -81,11 +95,12 @@ def status(db: Session = Depends(get_db)):
 
 # ---------- Google (Gmail + Calendar share a token) ----------
 @router.get("/google/start")
-def google_start(request: Request):
+def google_start(request: Request, current_user: User = Depends(get_current_user)):
     if not _is_configured("gmail"):
         return _not_configured_redirect("google")
     state = secrets.token_urlsafe(16)
     request.session["g_state"] = state
+    request.session["oauth_user_id"] = current_user.id
     params = {
         "client_id": os.getenv("GOOGLE_CLIENT_ID", ""),
         "redirect_uri": os.getenv("GOOGLE_REDIRECT_URI", ""),
@@ -107,6 +122,7 @@ def google_start(request: Request):
 async def google_callback(request: Request, code: str, state: str, db: Session = Depends(get_db)):
     if state != request.session.get("g_state"):
         raise HTTPException(400, "state mismatch")
+    user_id = _get_user_id(request)
     async with httpx.AsyncClient() as c:
         r = await c.post(
             "https://oauth2.googleapis.com/token",
@@ -121,8 +137,9 @@ async def google_callback(request: Request, code: str, state: str, db: Session =
     j = r.json()
     if "access_token" not in j:
         raise HTTPException(400, f"oauth error: {j}")
-    _save(db, "gmail", j["access_token"], j.get("refresh_token"), j.get("expires_in", 3600), j.get("scope", ""))
-    _save(db, "google_calendar", j["access_token"], j.get("refresh_token"), j.get("expires_in", 3600), j.get("scope", ""))
+    kw = dict(refresh=j.get("refresh_token"), ttl=j.get("expires_in", 3600), scope=j.get("scope", ""), user_id=user_id)
+    _save(db, "gmail", j["access_token"], **kw)
+    _save(db, "google_calendar", j["access_token"], **kw)
     return RedirectResponse(f"{FRONTEND_URL}/?connected=google")
 
 
@@ -138,11 +155,12 @@ def gcal_start(request: Request):
 
 # ---------- Microsoft (Outlook Mail + Calendar + Teams) ----------
 @router.get("/microsoft/start")
-def ms_start(request: Request):
+def ms_start(request: Request, current_user: User = Depends(get_current_user)):
     if not _is_configured("outlook_mail"):
         return _not_configured_redirect("microsoft")
     state = secrets.token_urlsafe(16)
     request.session["ms_state"] = state
+    request.session["oauth_user_id"] = current_user.id
     params = {
         "client_id": os.getenv("MS_CLIENT_ID", ""),
         "redirect_uri": os.getenv("MS_REDIRECT_URI", ""),
@@ -160,6 +178,7 @@ def ms_start(request: Request):
 async def ms_callback(request: Request, code: str, state: str, db: Session = Depends(get_db)):
     if state != request.session.get("ms_state"):
         raise HTTPException(400, "state mismatch")
+    user_id = _get_user_id(request)
     tenant = os.getenv("MS_TENANT_ID", "common")
     async with httpx.AsyncClient() as c:
         r = await c.post(
@@ -175,8 +194,9 @@ async def ms_callback(request: Request, code: str, state: str, db: Session = Dep
     j = r.json()
     if "access_token" not in j:
         raise HTTPException(400, f"oauth error: {j}")
+    kw = dict(refresh=j.get("refresh_token"), ttl=j.get("expires_in", 3600), scope=j.get("scope", ""), user_id=user_id)
     for p in ("outlook_mail", "outlook_calendar", "teams"):
-        _save(db, p, j["access_token"], j.get("refresh_token"), j.get("expires_in", 3600), j.get("scope", ""))
+        _save(db, p, j["access_token"], **kw)
     return RedirectResponse(f"{FRONTEND_URL}/?connected=microsoft")
 
 
@@ -197,9 +217,10 @@ def teams_start(request: Request):
 
 # ---------- Slack ----------
 @router.get("/slack/start")
-def slack_start(request: Request):
+def slack_start(request: Request, current_user: User = Depends(get_current_user)):
     if not _is_configured("slack"):
         return _not_configured_redirect("slack")
+    request.session["oauth_user_id"] = current_user.id
     params = {
         "client_id": os.getenv("SLACK_CLIENT_ID", ""),
         "scope": "channels:history,channels:read,im:history,im:read,users:read",
@@ -209,7 +230,8 @@ def slack_start(request: Request):
 
 
 @router.get("/slack/callback")
-async def slack_callback(code: str, db: Session = Depends(get_db)):
+async def slack_callback(request: Request, code: str, db: Session = Depends(get_db)):
+    user_id = _get_user_id(request)
     async with httpx.AsyncClient() as c:
         r = await c.post(
             "https://slack.com/api/oauth.v2.access",
@@ -224,15 +246,16 @@ async def slack_callback(code: str, db: Session = Depends(get_db)):
     token = j.get("authed_user", {}).get("access_token") or j.get("access_token")
     if not token:
         raise HTTPException(400, f"slack oauth error: {j}")
-    _save(db, "slack", token, ttl=10**9)
+    _save(db, "slack", token, ttl=10**9, user_id=user_id)
     return RedirectResponse(f"{FRONTEND_URL}/?connected=slack")
 
 
 # ---------- GitHub ----------
 @router.get("/github/start")
-def github_start():
+def github_start(request: Request, current_user: User = Depends(get_current_user)):
     if not _is_configured("github"):
         return _not_configured_redirect("github")
+    request.session["oauth_user_id"] = current_user.id
     params = {
         "client_id": os.getenv("GITHUB_CLIENT_ID", ""),
         "redirect_uri": os.getenv("GITHUB_REDIRECT_URI", ""),
@@ -242,7 +265,8 @@ def github_start():
 
 
 @router.get("/github/callback")
-async def github_callback(code: str, db: Session = Depends(get_db)):
+async def github_callback(request: Request, code: str, db: Session = Depends(get_db)):
+    user_id = _get_user_id(request)
     async with httpx.AsyncClient() as c:
         r = await c.post(
             "https://github.com/login/oauth/access_token",
@@ -257,47 +281,49 @@ async def github_callback(code: str, db: Session = Depends(get_db)):
     j = r.json()
     if "access_token" not in j:
         raise HTTPException(400, f"github oauth error: {j}")
-    _save(db, "github", j["access_token"], ttl=10**9, scope=j.get("scope", ""))
+    _save(db, "github", j["access_token"], ttl=10**9, scope=j.get("scope", ""), user_id=user_id)
     return RedirectResponse(f"{FRONTEND_URL}/?connected=github")
 
 
 # ---------- Static-key connectors ----------
-@router.post("/linear/connect")
-def linear_connect(db: Session = Depends(get_db)):
-    key = os.getenv("LINEAR_API_KEY", "")
-    if not key:
-        raise HTTPException(400, "LINEAR_API_KEY missing")
-    _save(db, "linear", key, ttl=10**9)
-    return {"ok": True}
-
-
 @router.get("/linear/start")
-def linear_start(db: Session = Depends(get_db)):
+def linear_start(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if not _is_configured("linear"):
         return _not_configured_redirect("linear")
-    linear_connect(db)
+    _save(db, "linear", os.getenv("LINEAR_API_KEY", ""), ttl=10**9, user_id=current_user.id)
     return RedirectResponse(f"{FRONTEND_URL}/?connected=linear")
 
 
 @router.get("/jira/start")
-def jira_start(db: Session = Depends(get_db)):
+def jira_start(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if not _is_configured("jira"):
         return _not_configured_redirect("jira")
-    _save(db, "jira", os.getenv("JIRA_TOKEN", ""), ttl=10**9)
+    _save(db, "jira", os.getenv("JIRA_TOKEN", ""), ttl=10**9, user_id=current_user.id)
     return RedirectResponse(f"{FRONTEND_URL}/?connected=jira")
 
 
 @router.get("/notion/start")
-def notion_start(db: Session = Depends(get_db)):
+def notion_start(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if not _is_configured("notion"):
         return _not_configured_redirect("notion")
-    _save(db, "notion", os.getenv("NOTION_TOKEN", ""), ttl=10**9)
+    _save(db, "notion", os.getenv("NOTION_TOKEN", ""), ttl=10**9, user_id=current_user.id)
     return RedirectResponse(f"{FRONTEND_URL}/?connected=notion")
 
 
 @router.get("/whatsapp/start")
-def whatsapp_start(db: Session = Depends(get_db)):
+def whatsapp_start(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if not _is_configured("whatsapp"):
         return _not_configured_redirect("whatsapp")
-    _save(db, "whatsapp", os.getenv("WHATSAPP_TOKEN", ""), ttl=10**9)
+    _save(db, "whatsapp", os.getenv("WHATSAPP_TOKEN", ""), ttl=10**9, user_id=current_user.id)
     return RedirectResponse(f"{FRONTEND_URL}/?connected=whatsapp")
+
+
+# ---------- Disconnect ----------
+@router.delete("/{provider}/disconnect")
+def disconnect(provider: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    tok = db.query(OAuthToken).filter_by(provider=provider, user_id=current_user.id).first()
+    if not tok:
+        raise HTTPException(404, "Provider not connected")
+    db.delete(tok)
+    db.commit()
+    return {"ok": True, "disconnected": provider}

@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 from sqlalchemy.orm import Session
 from models import EmailHistory, SenderProfile
 from connectors.gmail import GmailConnector
@@ -20,27 +21,27 @@ def _parse_dt(s: str) -> datetime:
 
 
 class HistoryCollector:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, user_id: Optional[int] = None):
         self.db = db
+        self.user_id = user_id
 
     async def collect(self) -> int:
         items = []
-        items += await GmailConnector(self.db).fetch(max_results=50)
-        items += await OutlookMailConnector(self.db).fetch(top=50)
+        items += await GmailConnector(self.db, self.user_id).fetch(max_results=50)
+        items += await OutlookMailConnector(self.db, self.user_id).fetch(top=50)
 
         added = 0
         for e in items:
             sender = e.get("from", "").lower()
             if not sender:
                 continue
-            exists = (
-                self.db.query(EmailHistory)
-                .filter_by(sender=sender, subject=e.get("subject", ""))
-                .first()
-            )
-            if exists:
+            q = self.db.query(EmailHistory).filter_by(sender=sender, subject=e.get("subject", ""))
+            if self.user_id is not None:
+                q = q.filter_by(user_id=self.user_id)
+            if q.first():
                 continue
             rec = EmailHistory(
+                user_id=self.user_id,
                 sender=sender,
                 subject=e.get("subject", "")[:500],
                 received_at=_parse_dt(e.get("received", "")),
@@ -54,7 +55,10 @@ class HistoryCollector:
         return added
 
     def _rebuild_profiles(self):
-        rows = self.db.query(EmailHistory).all()
+        q = self.db.query(EmailHistory)
+        if self.user_id is not None:
+            q = q.filter_by(user_id=self.user_id)
+        rows = q.all()
         by_sender: dict[str, list[EmailHistory]] = {}
         for r in rows:
             by_sender.setdefault(r.sender, []).append(r)
@@ -65,9 +69,12 @@ class HistoryCollector:
             latencies = [r.reply_latency_seconds for r in lst if r.reply_latency_seconds]
             avg_lat = sum(latencies) / len(latencies) if latencies else 0
             relationship = min(1.0, (opens / max(1, count)) * 0.5 + (replies / max(1, count)) * 0.5)
-            prof = self.db.query(SenderProfile).filter_by(sender=sender).first()
+            pq = self.db.query(SenderProfile).filter_by(sender=sender)
+            if self.user_id is not None:
+                pq = pq.filter_by(user_id=self.user_id)
+            prof = pq.first()
             if not prof:
-                prof = SenderProfile(sender=sender)
+                prof = SenderProfile(sender=sender, user_id=self.user_id)
                 self.db.add(prof)
             prof.email_count = count
             prof.reply_rate = replies / max(1, count)

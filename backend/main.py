@@ -12,8 +12,10 @@ from slowapi.errors import RateLimitExceeded
 
 from database import Base, engine
 import models  # noqa
+import migrations
 from routers import auth, feed, email_intelligence, chat, users
 
+migrations.run(engine)
 Base.metadata.create_all(bind=engine)
 
 limiter = Limiter(key_func=get_remote_address)

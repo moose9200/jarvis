@@ -1,5 +1,6 @@
 import re
 from datetime import datetime, timezone
+from typing import Optional
 from sqlalchemy.orm import Session
 from models import SenderProfile, EmailHistory
 
@@ -24,12 +25,19 @@ def _hours_since(s: str) -> float:
 class EmailScorer:
     COLD_START_TOTAL = 50
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, user_id: Optional[int] = None):
         self.db = db
-        self._total = db.query(EmailHistory).count()
+        self.user_id = user_id
+        q = db.query(EmailHistory)
+        if user_id is not None:
+            q = q.filter_by(user_id=user_id)
+        self._total = q.count()
 
     def _relationship(self, sender: str) -> float:
-        prof = self.db.query(SenderProfile).filter_by(sender=sender.lower()).first()
+        q = self.db.query(SenderProfile).filter_by(sender=sender.lower())
+        if self.user_id is not None:
+            q = q.filter_by(user_id=self.user_id)
+        prof = q.first()
         if not prof:
             return 0.3
         return prof.relationship_weight
@@ -56,13 +64,19 @@ class EmailScorer:
     def _thread_depth(self, thread_id: str) -> float:
         if not thread_id:
             return 0.1
-        cnt = self.db.query(EmailHistory).filter_by(thread_id=thread_id).count()
+        q = self.db.query(EmailHistory).filter_by(thread_id=thread_id)
+        if self.user_id is not None:
+            q = q.filter_by(user_id=self.user_id)
+        cnt = q.count()
         return min(1.0, cnt / 5.0)
 
     def score(self, email: dict) -> float:
         if self._total < self.COLD_START_TOTAL:
-            # Cold start: recency + urgency dominate
-            return round(self._recency(email.get("received", "")) * 0.6 + self._urgency(email.get("subject", ""), email.get("snippet", "")) * 0.4, 3)
+            return round(
+                self._recency(email.get("received", "")) * 0.6
+                + self._urgency(email.get("subject", ""), email.get("snippet", "")) * 0.4,
+                3,
+            )
         sender = email.get("from", "").lower()
         rel = self._relationship(sender)
         rec = self._recency(email.get("received", ""))

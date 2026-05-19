@@ -1,11 +1,12 @@
 import os
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 import bcrypt
 from pydantic import BaseModel
+from typing import Optional
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -64,12 +65,19 @@ def _create_token(user_id: int, email: str) -> str:
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    token_param: Optional[str] = Query(None, alias="token"),
     db: Session = Depends(get_db),
 ) -> User:
-    if not credentials:
+    # Accept Bearer header OR ?token= query param (for OAuth redirect flows)
+    raw_token = None
+    if credentials:
+        raw_token = credentials.credentials
+    elif token_param:
+        raw_token = token_param
+    if not raw_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     try:
-        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(raw_token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = int(payload["sub"])
     except (JWTError, KeyError, ValueError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
