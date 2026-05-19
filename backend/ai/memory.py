@@ -1,11 +1,13 @@
 import os
 from typing import List, Dict
 from sqlalchemy.orm import Session
-from anthropic import Anthropic
+from openai import OpenAI
 from models import ConversationTurn, ConversationSummary
 
 WINDOW = 20
-COMPRESSION_MODEL = "claude-haiku-4-5-20251001"
+GROQ_BASE = "https://api.groq.com/openai/v1"
+COMPRESSION_MODEL = os.getenv("AI_COMPRESSION_MODEL", "llama-3.1-8b-instant")
+
 
 class ConversationMemory:
     def __init__(self, db: Session):
@@ -43,13 +45,17 @@ class ConversationMemory:
         if not to_summarize:
             return
         transcript = "\n".join(f"{t.role}: {t.content}" for t in to_summarize)
-        client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
-        resp = client.messages.create(
+        api_key = os.getenv("GROQ_API_KEY") or os.getenv("ANTHROPIC_API_KEY", "")
+        base_url = GROQ_BASE if os.getenv("GROQ_API_KEY") else None
+        client = OpenAI(api_key=api_key, base_url=base_url)
+        resp = client.chat.completions.create(
             model=COMPRESSION_MODEL,
             max_tokens=400,
-            system="Compress this assistant conversation into a terse factual summary. Keep names, dates, decisions, and open follow-ups. Drop pleasantries.",
-            messages=[{"role": "user", "content": transcript}],
+            messages=[
+                {"role": "system", "content": "Compress this conversation into a terse factual summary. Keep names, dates, decisions, open follow-ups. Drop pleasantries."},
+                {"role": "user", "content": transcript},
+            ],
         )
-        summary_text = "".join(b.text for b in resp.content if hasattr(b, "text"))
+        summary_text = resp.choices[0].message.content or ""
         self.db.add(ConversationSummary(summary=summary_text, up_to_turn_id=to_summarize[-1].id))
         self.db.commit()
