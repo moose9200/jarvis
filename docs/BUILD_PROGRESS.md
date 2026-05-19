@@ -4,9 +4,9 @@
 
 ## Current Status
 **Last session:** 2026-05-20  
-**Last completed:** Step 21 (provider abstraction) + Step 3 (tier system + usage tracking + cache + /api/tokens/*)
-**Next task:** Step 4 — BYOAK settings endpoint + frontend AI Keys tab
-**Blocked by:** Nothing. (Step 6 multimodal upload will need user to set S3_* env vars from USER_TASKS #9.)
+**Last completed:** Step 4 (BYOAK backend — settings + api-keys + test-key + preferences + active-provider)
+**Next task:** Step 23 — Local dev setup (Makefile, seed data, mock OAuth) — OR Step 5 streaming chat
+**Blocked by:** Nothing. (Step 6 multimodal upload will need user to set S3_* env vars from USER_TASKS #9. Frontend Settings UI is Step 13.)
 
 ---
 
@@ -82,7 +82,7 @@ After each full step: git commit with message `step X: description`.
 ---
 
 ## STEP 4 — BYOAK (Bring Your Own API Key)
-- [ ] 4.1 Settings endpoint: PUT /api/settings/api-keys (all 5 providers)
+- [x] 4.1 Settings endpoint: PUT /api/settings/api-keys (all 5 providers + elevenlabs + github_pat) + GET /api/settings + POST /api/settings/test-key + PUT /api/settings/preferences + PUT /api/settings/active-provider
 - [x] 4.2 JarvisAI reads user's provider + key from UserSettings (decrypted), falls back to env
 - [x] 4.3 Graceful 402 if no API key configured for chosen provider (NoAPIKeyError → 402)
 - [x] 4.4 GET /api/tokens/today, /api/tokens/history, /api/tokens/session
