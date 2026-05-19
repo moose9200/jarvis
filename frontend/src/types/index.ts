@@ -50,5 +50,6 @@ export interface ChatTurn {
 export interface ConnectorStatus {
   name: string;
   connected: boolean;
+  configured: boolean;
   display: string;
 }

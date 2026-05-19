@@ -13,6 +13,8 @@ from models import OAuthToken
 
 router = APIRouter()
 
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost")
+
 PROVIDERS = [
     ("gmail", "Gmail"),
     ("google_calendar", "Google Calendar"),
@@ -26,6 +28,24 @@ PROVIDERS = [
     ("jira", "Jira"),
     ("notion", "Notion"),
 ]
+
+PROVIDER_CREDENTIALS = {
+    "gmail":            ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
+    "google_calendar":  ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
+    "outlook_mail":     ["MS_CLIENT_ID", "MS_CLIENT_SECRET"],
+    "outlook_calendar": ["MS_CLIENT_ID", "MS_CLIENT_SECRET"],
+    "teams":            ["MS_CLIENT_ID", "MS_CLIENT_SECRET"],
+    "slack":            ["SLACK_CLIENT_ID", "SLACK_CLIENT_SECRET"],
+    "github":           ["GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"],
+    "linear":           ["LINEAR_API_KEY"],
+    "jira":             ["JIRA_TOKEN"],
+    "notion":           ["NOTION_TOKEN"],
+    "whatsapp":         ["WHATSAPP_TOKEN"],
+}
+
+
+def _is_configured(name: str) -> bool:
+    return all(os.getenv(k, "").strip() for k in PROVIDER_CREDENTIALS.get(name, []))
 
 
 def _save(db: Session, provider: str, access: str, refresh: str = None, ttl: int = 3600, scope: str = ""):
@@ -41,18 +61,29 @@ def _save(db: Session, provider: str, access: str, refresh: str = None, ttl: int
     db.commit()
 
 
+def _not_configured_redirect(provider: str):
+    return RedirectResponse(f"{FRONTEND_URL}/?error=not_configured&provider={provider}")
+
+
 @router.get("/status")
 def status(db: Session = Depends(get_db)):
     rows = {t.provider: t for t in db.query(OAuthToken).all()}
     out = []
     for name, display in PROVIDERS:
-        out.append({"name": name, "display": display, "connected": name in rows})
+        out.append({
+            "name": name,
+            "display": display,
+            "connected": name in rows,
+            "configured": _is_configured(name),
+        })
     return {"connectors": out}
 
 
 # ---------- Google (Gmail + Calendar share a token) ----------
 @router.get("/google/start")
 def google_start(request: Request):
+    if not _is_configured("gmail"):
+        return _not_configured_redirect("google")
     state = secrets.token_urlsafe(16)
     request.session["g_state"] = state
     params = {
@@ -92,7 +123,7 @@ async def google_callback(request: Request, code: str, state: str, db: Session =
         raise HTTPException(400, f"oauth error: {j}")
     _save(db, "gmail", j["access_token"], j.get("refresh_token"), j.get("expires_in", 3600), j.get("scope", ""))
     _save(db, "google_calendar", j["access_token"], j.get("refresh_token"), j.get("expires_in", 3600), j.get("scope", ""))
-    return RedirectResponse("http://localhost:5173/?connected=google")
+    return RedirectResponse(f"{FRONTEND_URL}/?connected=google")
 
 
 @router.get("/gmail/start")
@@ -108,6 +139,8 @@ def gcal_start(request: Request):
 # ---------- Microsoft (Outlook Mail + Calendar + Teams) ----------
 @router.get("/microsoft/start")
 def ms_start(request: Request):
+    if not _is_configured("outlook_mail"):
+        return _not_configured_redirect("microsoft")
     state = secrets.token_urlsafe(16)
     request.session["ms_state"] = state
     params = {
@@ -144,7 +177,7 @@ async def ms_callback(request: Request, code: str, state: str, db: Session = Dep
         raise HTTPException(400, f"oauth error: {j}")
     for p in ("outlook_mail", "outlook_calendar", "teams"):
         _save(db, p, j["access_token"], j.get("refresh_token"), j.get("expires_in", 3600), j.get("scope", ""))
-    return RedirectResponse("http://localhost:5173/?connected=microsoft")
+    return RedirectResponse(f"{FRONTEND_URL}/?connected=microsoft")
 
 
 @router.get("/outlook_mail/start")
@@ -165,6 +198,8 @@ def teams_start(request: Request):
 # ---------- Slack ----------
 @router.get("/slack/start")
 def slack_start(request: Request):
+    if not _is_configured("slack"):
+        return _not_configured_redirect("slack")
     params = {
         "client_id": os.getenv("SLACK_CLIENT_ID", ""),
         "scope": "channels:history,channels:read,im:history,im:read,users:read",
@@ -190,12 +225,14 @@ async def slack_callback(code: str, db: Session = Depends(get_db)):
     if not token:
         raise HTTPException(400, f"slack oauth error: {j}")
     _save(db, "slack", token, ttl=10**9)
-    return RedirectResponse("http://localhost:5173/?connected=slack")
+    return RedirectResponse(f"{FRONTEND_URL}/?connected=slack")
 
 
 # ---------- GitHub ----------
 @router.get("/github/start")
 def github_start():
+    if not _is_configured("github"):
+        return _not_configured_redirect("github")
     params = {
         "client_id": os.getenv("GITHUB_CLIENT_ID", ""),
         "redirect_uri": os.getenv("GITHUB_REDIRECT_URI", ""),
@@ -221,7 +258,7 @@ async def github_callback(code: str, db: Session = Depends(get_db)):
     if "access_token" not in j:
         raise HTTPException(400, f"github oauth error: {j}")
     _save(db, "github", j["access_token"], ttl=10**9, scope=j.get("scope", ""))
-    return RedirectResponse("http://localhost:5173/?connected=github")
+    return RedirectResponse(f"{FRONTEND_URL}/?connected=github")
 
 
 # ---------- Static-key connectors ----------
@@ -236,29 +273,31 @@ def linear_connect(db: Session = Depends(get_db)):
 
 @router.get("/linear/start")
 def linear_start(db: Session = Depends(get_db)):
+    if not _is_configured("linear"):
+        return _not_configured_redirect("linear")
     linear_connect(db)
-    return RedirectResponse("http://localhost:5173/?connected=linear")
+    return RedirectResponse(f"{FRONTEND_URL}/?connected=linear")
 
 
 @router.get("/jira/start")
 def jira_start(db: Session = Depends(get_db)):
-    if not os.getenv("JIRA_TOKEN"):
-        raise HTTPException(400, "JIRA_TOKEN missing")
+    if not _is_configured("jira"):
+        return _not_configured_redirect("jira")
     _save(db, "jira", os.getenv("JIRA_TOKEN", ""), ttl=10**9)
-    return RedirectResponse("http://localhost:5173/?connected=jira")
+    return RedirectResponse(f"{FRONTEND_URL}/?connected=jira")
 
 
 @router.get("/notion/start")
 def notion_start(db: Session = Depends(get_db)):
-    if not os.getenv("NOTION_TOKEN"):
-        raise HTTPException(400, "NOTION_TOKEN missing")
+    if not _is_configured("notion"):
+        return _not_configured_redirect("notion")
     _save(db, "notion", os.getenv("NOTION_TOKEN", ""), ttl=10**9)
-    return RedirectResponse("http://localhost:5173/?connected=notion")
+    return RedirectResponse(f"{FRONTEND_URL}/?connected=notion")
 
 
 @router.get("/whatsapp/start")
 def whatsapp_start(db: Session = Depends(get_db)):
-    if not os.getenv("WHATSAPP_TOKEN"):
-        raise HTTPException(400, "WHATSAPP_TOKEN missing")
+    if not _is_configured("whatsapp"):
+        return _not_configured_redirect("whatsapp")
     _save(db, "whatsapp", os.getenv("WHATSAPP_TOKEN", ""), ttl=10**9)
-    return RedirectResponse("http://localhost:5173/?connected=whatsapp")
+    return RedirectResponse(f"{FRONTEND_URL}/?connected=whatsapp")

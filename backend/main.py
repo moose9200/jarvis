@@ -12,7 +12,7 @@ from slowapi.errors import RateLimitExceeded
 
 from database import Base, engine
 import models  # noqa
-from routers import auth, feed, email_intelligence, chat
+from routers import auth, feed, email_intelligence, chat, users
 
 Base.metadata.create_all(bind=engine)
 
@@ -35,6 +35,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(users.router, prefix="/api/users", tags=["users"])
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(feed.router, prefix="/api", tags=["feed"])
 app.include_router(email_intelligence.router, prefix="/api", tags=["email"])

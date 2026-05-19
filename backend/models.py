@@ -1,6 +1,14 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Float, JSON
+from sqlalchemy import Column, Integer, String, Text, DateTime, Float, JSON, Boolean
 from datetime import datetime
 from database import Base
+
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True)
+    email = Column(String, unique=True, index=True, nullable=False)
+    password_hash = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class OAuthToken(Base):
