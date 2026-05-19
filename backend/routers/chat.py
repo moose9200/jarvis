@@ -1,6 +1,8 @@
+import json
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -68,6 +70,48 @@ async def chat(
     except Exception:
         logger.exception("chat error")
         raise HTTPException(status_code=500, detail="Internal error. Try again.")
+
+
+@router.post("/chat/stream")
+async def chat_stream(
+    payload: ChatIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """SSE streaming chat. Emits events:
+        data: {"type":"token","text":"..."}\n\n
+        data: {"type":"done","usage":{...}}\n\n
+        data: [DONE]\n\n
+
+    NOTE: tool use is disabled in streaming mode (v1). For full tool support
+    fall back to POST /api/chat.
+    """
+    try:
+        client = JarvisAI(db, current_user.id)
+    except NoAPIKeyError as e:
+        raise HTTPException(
+            status_code=402,
+            detail=f"No {e.provider} API key configured. Add yours in Settings → AI Keys.",
+        )
+
+    async def generate():
+        try:
+            async for chunk in client.stream(payload.message):
+                yield f"data: {json.dumps(chunk)}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception:
+            logger.exception("stream generator error")
+            yield 'data: {"type":"error","text":"Internal error."}\n\n'
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "X-Accel-Buffering": "no",   # disable proxy buffering (nginx)
+            "Cache-Control": "no-cache",
+        },
+    )
 
 
 @router.get("/chat/quick-actions")

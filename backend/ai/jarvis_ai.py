@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import date as _date
-from typing import Optional
+from typing import AsyncIterator, Optional
 
 from sqlalchemy.orm import Session
 
@@ -31,7 +31,7 @@ from .exceptions import NoAPIKeyError
 from .knowledge import search as knowledge_search
 from .memory import ConversationMemory
 from .persona import build_system_prompt
-from .providers.base import AIMessage, AIResponse, AITool
+from .providers.base import AIChunk, AIMessage, AIResponse, AITool
 from .providers.factory import get_provider
 from .tiers import TIER_MODELS, estimate_cost, resolve_tier
 from .tools import TOOL_SCHEMAS, dispatch
@@ -163,6 +163,87 @@ class JarvisAI:
         fallback = "Boss, I hit my tool limit. Try narrowing the request."
         self.memory.append("assistant", fallback)
         return {"text": fallback, "usage": self._format_usage(agg)}
+
+    async def stream(self, user_message: str) -> AsyncIterator[dict]:
+        """Streaming variant of respond(). Yields plain dicts:
+            {"type": "token", "text": "..."}     — per-token delta
+            {"type": "done",  "usage": {...}}    — final usage + cost
+            {"type": "error", "text": "..."}     — on failure
+
+        Tool calls are NOT supported in streaming mode (yet) — the SSE path
+        is for fast text answers. Callers needing tools should use respond().
+        """
+        self.memory.append("user", user_message)
+        await self.memory.maybe_compress()
+
+        knowledge_block = await self._build_knowledge_block(user_message)
+        system_text = self._build_system_text(knowledge_block=knowledge_block)
+        messages: list[AIMessage] = self._build_message_history()
+
+        full_text_parts: list[str] = []
+        final_usage: dict | None = None
+
+        try:
+            async for chunk in self.provider.stream(
+                messages=messages,
+                system=system_text,
+                tools=None,
+                model=self.model,
+                max_tokens=self.max_tokens,
+                thinking_budget=self.thinking_budget,
+            ):
+                if chunk.type == "token" and chunk.text:
+                    full_text_parts.append(chunk.text)
+                    yield {"type": "token", "text": chunk.text}
+                elif chunk.type == "done":
+                    final_usage = chunk.usage or {}
+        except Exception:
+            logger.exception("stream error")
+            yield {"type": "error", "text": "Stream failed. Try again."}
+            return
+
+        text = "".join(full_text_parts) or "Boss, no response generated."
+        self.memory.append("assistant", text)
+
+        if final_usage and self.user_id is not None:
+            try:
+                cost = estimate_cost(
+                    provider=self.provider_name,
+                    tier=self.tier if self.tier in TIER_MODELS else DEFAULT_TIER,
+                    input_tokens=final_usage.get("input", 0),
+                    output_tokens=final_usage.get("output", 0),
+                )
+                row = TokenUsage(
+                    user_id=self.user_id,
+                    date=_date.today().isoformat(),
+                    provider=self.provider_name,
+                    model=self.model,
+                    input_tokens=final_usage.get("input", 0),
+                    output_tokens=final_usage.get("output", 0),
+                    cache_read_tokens=final_usage.get("cache_read", 0),
+                    cache_write_tokens=final_usage.get("cache_write", 0),
+                    cost_usd=cost,
+                )
+                self.db.add(row)
+                self.db.commit()
+                yield {
+                    "type": "done",
+                    "usage": {
+                        "provider": self.provider_name,
+                        "model": self.model,
+                        "input": final_usage.get("input", 0),
+                        "output": final_usage.get("output", 0),
+                        "cache_read": final_usage.get("cache_read", 0),
+                        "cache_write": final_usage.get("cache_write", 0),
+                        "cost_usd": round(cost, 6),
+                    },
+                }
+            except Exception:
+                logger.exception("failed to persist stream usage")
+                self.db.rollback()
+                yield {"type": "done", "usage": final_usage or {}}
+        else:
+            yield {"type": "done", "usage": final_usage or {}}
 
     # ── Internals ───────────────────────────────────────────────────────
 

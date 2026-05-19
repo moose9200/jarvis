@@ -114,11 +114,11 @@ After each full step: git commit with message `step X: description`.
 ---
 
 ## STEP 5 — Streaming Chat (SSE)
-- [ ] 5.1 POST /api/chat/stream SSE endpoint
-- [ ] 5.2 JarvisAI.stream() method yields AIChunk objects
-- [ ] 5.3 Frontend StreamingChatBubble component (tokens appear as generated)
-- [ ] 5.4 Cancel button mid-stream
-- [ ] 5.5 Token usage shown at end of stream
+- [x] 5.1 POST /api/chat/stream SSE endpoint (text/event-stream with X-Accel-Buffering:no)
+- [x] 5.2 JarvisAI.stream() yields dicts {type:"token", text}, {type:"done", usage}, {type:"error", text}
+- [ ] 5.3 Frontend StreamingChatBubble component (deferred to frontend pass)
+- [ ] 5.4 Cancel button mid-stream (deferred to frontend pass — AbortController)
+- [x] 5.5 Token usage emitted in the done event (provider, model, in, out, cache, cost_usd)
 
 **Commit:** `git commit -m "step 5: streaming SSE chat"`
 
