@@ -53,3 +53,12 @@ export interface ConnectorStatus {
   configured: boolean;
   display: string;
 }
+
+export type PanelKey = "calendar" | "email" | "tasks" | "projects";
+
+export interface ToastItem {
+  id: string;
+  type: "success" | "error" | "info" | "warning";
+  message: string;
+  duration?: number;
+}

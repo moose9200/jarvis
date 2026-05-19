@@ -5,7 +5,9 @@ import type {
   EmailItem,
   MessageItem,
   Mode,
+  PanelKey,
   TaskItem,
+  ToastItem,
   WakeState,
   ConnectorStatus,
 } from "../types";
@@ -13,6 +15,16 @@ import type {
 const API = import.meta.env.VITE_API_BASE || "";
 
 const storedToken = typeof window !== "undefined" ? localStorage.getItem("jarvis_token") : null;
+
+const storedPanels = (() => {
+  try { return JSON.parse(localStorage.getItem("jarvis_panels") || "{}"); } catch { return {}; }
+})();
+const defaultPanelVisibility: Record<PanelKey, boolean> = {
+  calendar: storedPanels.calendar ?? true,
+  email: storedPanels.email ?? true,
+  tasks: storedPanels.tasks ?? true,
+  projects: storedPanels.projects ?? true,
+};
 
 interface JarvisState {
   // Auth
@@ -30,6 +42,9 @@ interface JarvisState {
   projects: TaskItem[];
   chat: ChatTurn[];
   connectors: ConnectorStatus[];
+  // UI state
+  panelVisibility: Record<PanelKey, boolean>;
+  toasts: ToastItem[];
   // Actions — auth
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
@@ -41,6 +56,10 @@ interface JarvisState {
   fetchConnectors: () => Promise<void>;
   sendChat: (text: string) => Promise<string>;
   appendChat: (turn: ChatTurn) => void;
+  // Actions — UI
+  setPanelVisibility: (key: PanelKey, visible: boolean) => void;
+  addToast: (toast: Omit<ToastItem, "id">) => void;
+  removeToast: (id: string) => void;
 }
 
 function authHeaders(token: string | null): HeadersInit {
@@ -66,6 +85,10 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
   projects: [],
   chat: [],
   connectors: [],
+
+  // UI initial state
+  panelVisibility: defaultPanelVisibility,
+  toasts: [],
 
   // ── Auth actions ──────────────────────────────────────────────────────────
 
@@ -153,4 +176,21 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
   },
 
   appendChat: (turn) => set((s) => ({ chat: [...s.chat, turn] })),
+
+  // ── UI actions ────────────────────────────────────────────────────────────
+
+  setPanelVisibility: (key, visible) => set((s) => {
+    const next = { ...s.panelVisibility, [key]: visible };
+    localStorage.setItem("jarvis_panels", JSON.stringify(next));
+    return { panelVisibility: next };
+  }),
+
+  addToast: (toast) => {
+    const id = Math.random().toString(36).slice(2);
+    const item: ToastItem = { ...toast, id, duration: toast.duration ?? 4000 };
+    set((s) => ({ toasts: [...s.toasts, item] }));
+    setTimeout(() => get().removeToast(id), item.duration);
+  },
+
+  removeToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 }));

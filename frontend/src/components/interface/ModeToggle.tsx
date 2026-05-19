@@ -4,11 +4,27 @@ export function ModeToggle() {
   const mode = useJarvisStore((s) => s.mode);
   const setMode = useJarvisStore((s) => s.setMode);
   return (
-    <button
-      onClick={() => setMode(mode === "voice" ? "text" : "voice")}
-      className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-auto px-3 py-1 text-xs uppercase tracking-widest border border-jcyan/60 text-jcyan rounded-full bg-black/40 backdrop-blur"
-    >
-      Mode · {mode}
-    </button>
+    <div className="flex items-center gap-0 bg-black/40 border border-white/15 rounded-full p-0.5 backdrop-blur">
+      <button
+        onClick={() => setMode("voice")}
+        className={`px-4 py-1.5 text-xs uppercase tracking-widest rounded-full transition-all font-bold ${
+          mode === "voice"
+            ? "bg-jcyan/20 text-jcyan border border-jcyan/40 shadow-lg shadow-jcyan/20"
+            : "text-white/30 hover:text-white/60"
+        }`}
+      >
+        🎙 Voice
+      </button>
+      <button
+        onClick={() => setMode("text")}
+        className={`px-4 py-1.5 text-xs uppercase tracking-widest rounded-full transition-all font-bold ${
+          mode === "text"
+            ? "bg-jcyan/20 text-jcyan border border-jcyan/40 shadow-lg shadow-jcyan/20"
+            : "text-white/30 hover:text-white/60"
+        }`}
+      >
+        ⌨ Text
+      </button>
+    </div>
   );
 }

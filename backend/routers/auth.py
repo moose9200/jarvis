@@ -94,8 +94,7 @@ def status(db: Session = Depends(get_db), current_user: User = Depends(get_curre
 
 
 # ---------- Google (Gmail + Calendar share a token) ----------
-@router.get("/google/start")
-def google_start(request: Request, current_user: User = Depends(get_current_user)):
+def _google_oauth_redirect(request: Request, current_user: User):
     if not _is_configured("gmail"):
         return _not_configured_redirect("google")
     state = secrets.token_urlsafe(16)
@@ -116,6 +115,11 @@ def google_start(request: Request, current_user: User = Depends(get_current_user
         "state": state,
     }
     return RedirectResponse("https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params))
+
+
+@router.get("/google/start")
+def google_start(request: Request, current_user: User = Depends(get_current_user)):
+    return _google_oauth_redirect(request, current_user)
 
 
 @router.get("/google/callback")
@@ -144,13 +148,13 @@ async def google_callback(request: Request, code: str, state: str, db: Session =
 
 
 @router.get("/gmail/start")
-def gmail_start(request: Request):
-    return google_start(request)
+def gmail_start(request: Request, current_user: User = Depends(get_current_user)):
+    return google_start(request, current_user)
 
 
 @router.get("/google_calendar/start")
-def gcal_start(request: Request):
-    return google_start(request)
+def gcal_start(request: Request, current_user: User = Depends(get_current_user)):
+    return google_start(request, current_user)
 
 
 # ---------- Microsoft (Outlook Mail + Calendar + Teams) ----------
@@ -201,18 +205,18 @@ async def ms_callback(request: Request, code: str, state: str, db: Session = Dep
 
 
 @router.get("/outlook_mail/start")
-def om_start(request: Request):
-    return ms_start(request)
+def om_start(request: Request, current_user: User = Depends(get_current_user)):
+    return ms_start(request, current_user)
 
 
 @router.get("/outlook_calendar/start")
-def oc_start(request: Request):
-    return ms_start(request)
+def oc_start(request: Request, current_user: User = Depends(get_current_user)):
+    return ms_start(request, current_user)
 
 
 @router.get("/teams/start")
-def teams_start(request: Request):
-    return ms_start(request)
+def teams_start(request: Request, current_user: User = Depends(get_current_user)):
+    return ms_start(request, current_user)
 
 
 # ---------- Slack ----------
