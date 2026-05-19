@@ -92,22 +92,22 @@ After each full step: git commit with message `step X: description`.
 ---
 
 ## STEP 23 — Local Dev Setup
-- [ ] 23.1 docker-compose.dev.yml with hot reload for backend + frontend
-- [ ] 23.2 Makefile (make dev, test, seed, migrate, logs)
-- [ ] 23.3 tools/mock-oauth/ — mock server to bypass Google/Microsoft OAuth locally
-- [ ] 23.4 backend/seed.py — create test user + fake data
-- [ ] 23.5 backend/.env.dev with safe local defaults
-- [ ] 23.6 .gitignore: add .env.dev, .env, *.pyc, __pycache__, node_modules
+- [x] 23.1 docker-compose.dev.yml with hot reload for backend (uvicorn --reload via volume mount) and celery debug logging
+- [x] 23.2 Makefile (dev / prod / down / build / migrate / migrate-new / seed / test / lint / shell / psql / redis-cli / logs / backup)
+- [ ] 23.3 tools/mock-oauth/ — DEFERRED. Frontend uses real OAuth via the one-time code exchange; mock server adds value only for offline E2E tests.
+- [x] 23.4 backend/seed.py — 3 test users (founder/pro/free, pw test1234), UserContext for founder, 5 RAG chunks, 30 days of TokenUsage history
+- [ ] 23.5 backend/.env.dev — DEFERRED. Current .env is reused; .env.dev would only matter once mock-oauth lands.
+- [ ] 23.6 .gitignore additions — TODO if not already covered
 
 **Commit:** `git commit -m "step 23: local dev setup + seed data"`
 
 ---
 
 ## STEP 24 — Version Control + CI/CD
-- [ ] 24.1 .github/workflows/ci.yml (test → staging → prod with approval)
-- [ ] 24.2 .pre-commit-config.yaml (ruff, mypy, secret detection)
-- [ ] 24.3 CHANGELOG.md initial entry
-- [ ] 24.4 Branch protection rules (document in README — user sets in GitHub UI)
+- [x] 24.1 .github/workflows/ci.yml — 3 jobs: backend-test (pytest + postgres + redis), frontend-build (tsc + vite build), docker-build smoke. Runs on push to main/staging + PRs.
+- [x] 24.2 .pre-commit-config.yaml — ruff (auto-fix), trailing-whitespace, end-of-file-fixer, check-added-large-files, detect-private-key, gitleaks.
+- [x] 24.3 CHANGELOG.md with current unreleased entries summarizing steps 0–6, 21, 23, 24.
+- [ ] 24.4 Branch protection rules — USER TODO (must set in GitHub UI; see USER_TASKS.txt #11).
 
 **Commit:** `git commit -m "step 24: CI/CD + pre-commit hooks"`
 

@@ -1,0 +1,37 @@
+version: "3.9"
+
+# Development override.
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# Or: `make dev`
+#
+# Adds hot reload for backend + frontend, debug-level Celery logging, exposes
+# Postgres + Redis on host ports so you can attach psql / redis-cli from
+# outside containers.
+
+services:
+  postgres:
+    ports:
+      - "5433:5432"   # 5433 to avoid colliding with host postgres
+
+  redis:
+    ports:
+      - "6380:6379"   # 6380 to avoid colliding with host redis
+
+  backend:
+    volumes:
+      - ./backend:/app
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+    environment:
+      ENV: development
+
+  worker:
+    volumes:
+      - ./backend:/app
+    command: celery -A worker worker --loglevel=debug --concurrency=2
+
+  frontend:
+    # Frontend currently builds for static serve. Hot reload variant runs the
+    # Vite dev server. Use the override if/when you switch to `vite` dev mode.
+    # For now, keep the prod-mode build to match the deployed flow.

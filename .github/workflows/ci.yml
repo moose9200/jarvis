@@ -2,66 +2,90 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, staging]
   pull_request:
-    branches: [main]
 
 jobs:
-  backend-tests:
-    name: Backend Tests
+  backend-test:
+    name: Backend tests
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
-
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: jarvis_test
+          POSTGRES_USER: jarvis
+          POSTGRES_PASSWORD: test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U jarvis -d jarvis_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://jarvis:test@localhost:5432/jarvis_test
+      REDIS_URL: redis://localhost:6379/0
+      JWT_SECRET: test-jwt-secret-must-be-32-chars-ok
+      SESSION_SECRET: test-session-secret-32-chars-okok
+      TOKEN_ENCRYPTION_KEY: dGVzdC1lbmNyeXB0aW9uLWtleS0zMmJ5dGVz
+      ANTHROPIC_API_KEY: dummy
+      ALLOWED_ORIGINS: http://localhost
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Run pytest
-        env:
-          ANTHROPIC_API_KEY: test-key
-          SESSION_SECRET: test-secret
-        run: pytest tests/ -v
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend deps
+        run: pip install -r backend/requirements.txt
+      - name: Alembic upgrade
+        working-directory: backend
+        run: alembic upgrade head
+      - name: Pytest
+        working-directory: backend
+        run: pytest tests/ -v --tb=short -q
 
   frontend-build:
-    name: Frontend Build
+    name: Frontend type-check + build
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: frontend
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Type check
-        run: npx tsc --noEmit
-
-      - name: Build
-        run: npm run build
+      - run: npm ci || npm install
+      - run: node_modules/.bin/tsc --noEmit
+      - run: npm run build
         env:
           VITE_API_BASE: http://localhost:8000
-          VITE_ELEVENLABS_KEY: ""
+
+  docker-build:
+    name: Docker images smoke build
+    runs-on: ubuntu-latest
+    needs: [backend-test, frontend-build]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: false
+          tags: jarvis-backend:ci
+      - name: Build frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: false
+          tags: jarvis-frontend:ci
+          build-args: VITE_API_BASE=http://localhost:8000
