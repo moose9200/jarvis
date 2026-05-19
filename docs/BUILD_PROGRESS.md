@@ -138,11 +138,11 @@ After each full step: git commit with message `step X: description`.
 ---
 
 ## STEP 7 — Personality Modes + Quick Actions
-- [ ] 7.1 PERSONALITY_INJECTIONS dict in persona.py (6 modes)
-- [ ] 7.2 Default: caveman (injected into ALL prompts — saves tokens)
-- [ ] 7.3 GET /api/chat/quick-actions (10 chips)
-- [ ] 7.4 Frontend: PersonalityModeSelector pills above chat
-- [ ] 7.5 Frontend: QuickActionChips row (horizontally scrollable)
+- [x] 7.1 PERSONALITY_INJECTIONS dict in persona.py (6 modes: caveman/expert/creative/executive/devils_advocate/coach)
+- [x] 7.2 Default: caveman (injected into ALL prompts — saves tokens). Reads from UserSettings.personality_mode.
+- [x] 7.3 GET /api/chat/quick-actions (10 chips) + GET /api/chat/personalities
+- [ ] 7.4 Frontend: PersonalityModeSelector pills above chat  (Step 13 frontend)
+- [ ] 7.5 Frontend: QuickActionChips row (horizontally scrollable)  (Step 13 frontend)
 
 **Commit:** `git commit -m "step 7: personality modes + quick action chips"`
 

@@ -27,7 +27,7 @@ from models import TokenUsage, UserSettings
 
 from .exceptions import NoAPIKeyError
 from .memory import ConversationMemory
-from .persona import SYSTEM_PROMPT
+from .persona import build_system_prompt
 from .providers.base import AIMessage, AIResponse, AITool
 from .providers.factory import get_provider
 from .tiers import TIER_MODELS, estimate_cost, resolve_tier
@@ -161,7 +161,8 @@ class JarvisAI:
     # ── Internals ───────────────────────────────────────────────────────
 
     def _build_system_text(self) -> str:
-        s = SYSTEM_PROMPT
+        personality = self.settings.personality_mode if self.settings else None
+        s = build_system_prompt(personality)
         summary = self.memory.summaries()
         if summary:
             s += f"\n\nEarlier-conversation summary:\n{summary}"
