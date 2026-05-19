@@ -4,8 +4,8 @@
 
 ## Current Status
 **Last session:** 2026-05-20  
-**Last completed:** Step 1 — Infrastructure (Postgres + Redis + Celery + S3 + Alembic)
-**Next task:** Step 2 — V2 database models
+**Last completed:** Step 2 — V2 database models + Alembic 0002 migration
+**Next task:** Step 21 — Provider-agnostic AI abstraction layer
 **Blocked by:** Nothing. (Step 6 multimodal upload will need user to set S3_* env vars from USER_TASKS #9.)
 
 ---
@@ -42,15 +42,15 @@ After each full step: git commit with message `step X: description`.
 ---
 
 ## STEP 2 — New DB Models
-- [ ] 2.1 UserSettings model (ai_provider, default_model, api keys per provider)
-- [ ] 2.2 UserContext model (about_me, communication_style, priorities, team)
-- [ ] 2.3 TokenUsage model (date, model, input/output tokens, cost_usd)
-- [ ] 2.4 KnowledgeChunk model (pgvector embedding, source_type, content)
-- [ ] 2.5 FileUpload model (s3_key, file_type, processed)
-- [ ] 2.6 Decision model (source, title, status, ai_suggestion)
-- [ ] 2.7 ShopifyConfig model (shop_domain, access_token_encrypted)
-- [ ] 2.8 FreshdeskConfig model (subdomain, api_key_encrypted)
-- [ ] 2.9 Alembic migration: `alembic revision --autogenerate -m "v2 models"`
+- [x] 2.1 UserSettings model (ai_provider, default_model, api keys per provider)
+- [x] 2.2 UserContext model (about_me, communication_style, priorities, team)
+- [x] 2.3 TokenUsage model (date, model, input/output tokens, cost_usd)
+- [x] 2.4 KnowledgeChunk model (pgvector embedding, source_type, content)
+- [x] 2.5 FileUpload model (s3_key, file_type, processed)
+- [x] 2.6 Decision model (source, title, status, ai_suggestion)
+- [x] 2.7 ShopifyConfig model (shop_domain, access_token_encrypted)
+- [x] 2.8 FreshdeskConfig model (subdomain, api_key_encrypted)
+- [x] 2.9 Alembic migration: hand-written 0002_v2_models.py (autogen output was noisy, hand-write was cleaner)
 
 **Commit:** `git commit -m "step 2: v2 database models + migration"`
 
@@ -291,6 +291,12 @@ _Add notes here as you make architecture decisions or discover issues_
 - 2026-05-20: Spec written. Provider-agnostic AI layer required — no direct Anthropic imports in business logic.
 - 2026-05-20: BYOAK model confirmed. Users bring their own API key (Anthropic/OpenAI/Groq/Mistral/Google).
 - 2026-05-20: Default personality = caveman (saves ~60% output tokens for users).
+- 2026-05-20: Step 2 complete. Notes:
+  - UserSettings carries BYOAK keys for 5 providers (anthropic, openai, groq, mistral, google) + elevenlabs + github PAT. All *_encrypted columns must be wrapped with crypto.{encrypt,decrypt}.
+  - FileUpload added `extracted_text` and `extra` fields beyond the spec to capture PDF/CSV/transcript output and arbitrary processor metadata.
+  - Decision added `source_id`, `snoozed_until`, `decided_at` for richer state.
+  - TokenUsage tracks cache_write_tokens + thinking_tokens too (Anthropic prompt caching + extended thinking).
+  - 15 tables total now (incl. alembic_version).
 - 2026-05-20: Step 1 complete. Notes:
   - Postgres uses pgvector/pgvector:pg16 — vector extension created in initial migration for Step 8 RAG.
   - Postgres + Redis are NOT exposed on host ports (port 6379 conflicted with local brew redis). They're reachable via compose internal network only. Use `docker compose exec postgres psql -U jarvis jarvis` to inspect.
