@@ -16,14 +16,13 @@ from starlette.middleware.sessions import SessionMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from database import Base, engine
+from database import Base, engine  # noqa: F401 — Base re-exported for legacy callers
 from rate_limit import limiter
 import models  # noqa
-import migrations
 from routers import auth, feed, email_intelligence, chat, users
 
-migrations.run(engine)
-Base.metadata.create_all(bind=engine)
+# Schema is owned by Alembic. Migrations run via `alembic upgrade head` from
+# the Dockerfile CMD (see backend/Dockerfile) — never auto-create here.
 
 app = FastAPI(title="JARVIS Backend", version="0.1.0")
 app.state.limiter = limiter
@@ -52,13 +51,46 @@ app.include_router(chat.router, prefix="/api", tags=["chat"])
 
 @app.get("/api/health")
 def health():
-    anthropic_key_set = bool(os.getenv("ANTHROPIC_API_KEY", "").strip())
-    elevenlabs_key_set = bool(os.getenv("ELEVENLABS_API_KEY", "").strip())
+    """Liveness + dependency check. Returns 200 even if optional deps fail,
+    with a `status` field per dependency for monitoring."""
+    from sqlalchemy import text
+
+    # Database
+    db_ok = False
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+            db_ok = True
+    except Exception:
+        pass
+
+    # Redis
+    redis_ok = False
+    if os.getenv("REDIS_URL"):
+        try:
+            import redis
+            r = redis.Redis.from_url(os.environ["REDIS_URL"], socket_timeout=2)
+            redis_ok = bool(r.ping())
+        except Exception:
+            pass
+
+    # Storage
+    try:
+        from storage import is_configured as _storage_ok
+        storage_ok = _storage_ok()
+    except Exception:
+        storage_ok = False
+
     return {
         "status": "ok",
-        "version": "0.1.0",
+        "version": "0.2.0",
         "api_keys": {
-            "anthropic": anthropic_key_set,
-            "elevenlabs": elevenlabs_key_set,
+            "anthropic": bool(os.getenv("ANTHROPIC_API_KEY", "").strip()),
+            "elevenlabs": bool(os.getenv("ELEVENLABS_API_KEY", "").strip()),
+        },
+        "deps": {
+            "database": db_ok,
+            "redis": redis_ok,
+            "storage": storage_ok,
         },
     }

@@ -4,9 +4,9 @@
 
 ## Current Status
 **Last session:** 2026-05-20  
-**Last completed:** Step 0 — Security hardening (all 7 sub-tasks verified)
-**Next task:** Step 1 — Infrastructure migration (PostgreSQL + Redis + Celery + S3)
-**Blocked by:** Nothing. Ready to build.
+**Last completed:** Step 1 — Infrastructure (Postgres + Redis + Celery + S3 + Alembic)
+**Next task:** Step 2 — V2 database models
+**Blocked by:** Nothing. (Step 6 multimodal upload will need user to set S3_* env vars from USER_TASKS #9.)
 
 ---
 
@@ -30,12 +30,12 @@ After each full step: git commit with message `step X: description`.
 ---
 
 ## STEP 1 — Infrastructure Migration
-- [ ] 1.1 SQLite → PostgreSQL (update DATABASE_URL, docker-compose.yml)
-- [ ] 1.2 Add Redis service to docker-compose.yml
-- [ ] 1.3 Switch slowapi rate limiter to Redis backend
-- [ ] 1.4 Celery worker setup (backend/worker.py + docker-compose service)
-- [ ] 1.5 S3/R2 file storage (backend/storage.py)
-- [ ] 1.6 Alembic init (replace migrations.py)
+- [x] 1.1 SQLite → PostgreSQL (update DATABASE_URL, docker-compose.yml)
+- [x] 1.2 Add Redis service to docker-compose.yml
+- [x] 1.3 Switch slowapi rate limiter to Redis backend
+- [x] 1.4 Celery worker setup (backend/worker.py + docker-compose service)
+- [x] 1.5 S3/R2 file storage (backend/storage.py)
+- [x] 1.6 Alembic init (replace migrations.py)
 
 **Commit:** `git commit -m "step 1: postgres + redis + celery + s3"`
 
@@ -291,6 +291,14 @@ _Add notes here as you make architecture decisions or discover issues_
 - 2026-05-20: Spec written. Provider-agnostic AI layer required — no direct Anthropic imports in business logic.
 - 2026-05-20: BYOAK model confirmed. Users bring their own API key (Anthropic/OpenAI/Groq/Mistral/Google).
 - 2026-05-20: Default personality = caveman (saves ~60% output tokens for users).
+- 2026-05-20: Step 1 complete. Notes:
+  - Postgres uses pgvector/pgvector:pg16 — vector extension created in initial migration for Step 8 RAG.
+  - Postgres + Redis are NOT exposed on host ports (port 6379 conflicted with local brew redis). They're reachable via compose internal network only. Use `docker compose exec postgres psql -U jarvis jarvis` to inspect.
+  - Existing SQLite data was dropped — fresh Postgres DB. Acceptable for dev.
+  - Dockerfile CMD runs `alembic upgrade head` before uvicorn so a stale schema can't boot.
+  - oauth_code now backed by Redis (GETDEL atomic single-use). Falls back to in-memory dict when REDIS_URL is unset (for tests).
+  - storage.py is stubbed — is_configured() returns false until user sets S3_* env vars (USER_TASKS #9). All file-upload calls raise StorageUnconfiguredError until then.
+  - Health check now reports per-dep status: {database, redis, storage}.
 - 2026-05-20: Step 0 complete. Notes:
   - Added TOKEN_ENCRYPTION_KEY as a required boot-time secret (in addition to JWT_SECRET, SESSION_SECRET).
   - One-time OAuth code store is in-memory (backend/oauth_code.py) — single-worker only. Migrate to Redis in Step 1.3.
