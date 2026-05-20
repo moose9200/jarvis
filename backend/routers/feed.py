@@ -40,8 +40,10 @@ async def feed(db: Session = Depends(get_db), current_user: User = Depends(get_c
     ) = await asyncio.gather(
         _safe(_c(GmailConnector).fetch(max_results=25)),
         _safe(_c(OutlookMailConnector).fetch(top=25)),
-        _safe(_c(GoogleCalendarConnector).fetch(days=1)),
-        _safe(_c(OutlookCalendarConnector).fetch(days=1)),
+        # 7-day window — "Calendar" panel should show the upcoming week,
+        # not just the next 24 hours (most users have empty same-day calendars).
+        _safe(_c(GoogleCalendarConnector).fetch(days=7)),
+        _safe(_c(OutlookCalendarConnector).fetch(days=7)),
         _safe(_c(SlackConnector).fetch()),
         _safe(_c(TeamsConnector).fetch()),
         _safe(_c(WhatsAppConnector).fetch()),
