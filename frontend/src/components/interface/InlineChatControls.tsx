@@ -108,7 +108,7 @@ export function InlineChatControls({ onPick }: { onPick: (prompt: string) => voi
 
       {/* Row 2: quick action chips */}
       {actions.length > 0 && (
-        <div className="flex gap-1 overflow-x-auto scrollbar-thin pb-1 -mx-0.5 px-0.5">
+        <div className="flex gap-1 overflow-x-auto scrollbar-hidden py-1.5 -mx-0.5 px-0.5">
           {actions.map((a) => (
             <button
               key={a.id}

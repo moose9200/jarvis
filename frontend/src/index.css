@@ -6,11 +6,40 @@ html, body, #root {
   height: 100%;
   margin: 0;
   overflow: hidden;
-  background: #0a0e1a;
+  background: #02040a;
   font-family: "JetBrains Mono", monospace;
   color: #ffffff;
 }
 
 canvas {
   display: block;
+}
+
+/* Hide scrollbars while keeping scroll functionality.
+   Used by the inline chat quick-action chip row — the native horizontal
+   scrollbar was clipping chip descenders. */
+.scrollbar-hidden {
+  scrollbar-width: none;            /* Firefox */
+  -ms-overflow-style: none;         /* IE/Edge legacy */
+}
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;                    /* Chrome/Safari */
+  width: 0;
+  height: 0;
+}
+
+/* Optional thin custom scrollbar for vertical lists (chat history, settings). */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(0, 212, 255, 0.2);
+  border-radius: 3px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 212, 255, 0.4);
 }

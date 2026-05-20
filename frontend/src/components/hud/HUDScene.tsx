@@ -1,20 +1,25 @@
 import { Canvas } from "@react-three/fiber";
-import { ArcReactorRings } from "./ArcReactorRings";
-import { CentralOrb } from "./CentralOrb";
-import { ParticleField } from "./ParticleField";
+import { Galaxy, Nebulae } from "./Galaxy";
 
+/**
+ * Full-viewport ambient background. A slow-rotating spiral galaxy with
+ * three soft nebula blobs behind it. Tuned to be subtle — fades to dark
+ * at the edges so the foreground HUD panels stay readable.
+ */
 export function HUDScene() {
   return (
     <Canvas
-      camera={{ position: [0, 0, 6], fov: 50 }}
+      camera={{ position: [0, 1.2, 8.5], fov: 55 }}
       className="absolute inset-0"
-      gl={{ antialias: true, alpha: true }}
+      gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
+      dpr={[1, 1.8]}
     >
-      <ambientLight intensity={0.4} />
-      <pointLight position={[0, 0, 5]} color="#00d4ff" intensity={2} />
-      <ParticleField />
-      <ArcReactorRings />
-      <CentralOrb />
+      {/* Faint ambient + a single key light for any non-additive meshes */}
+      <ambientLight intensity={0.15} />
+      <pointLight position={[0, 4, 6]} color="#9fb8ff" intensity={0.6} />
+
+      <Nebulae />
+      <Galaxy />
     </Canvas>
   );
 }
