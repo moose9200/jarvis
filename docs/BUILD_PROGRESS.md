@@ -4,9 +4,9 @@
 
 ## Current Status
 **Last session:** 2026-05-20  
-**Last completed:** Step 14 (Decision Inbox CRUD + frontend panel + push_to_github tool) + Step 11 (use-case prompts).
-**Next task:** Step 25 (deployment notes) — and then we wait for user to wake up + provide Shopify/Freshdesk/Stripe/S3 credentials to unblock Steps 6 (S3), 9, 10, 22.
-**Blocked by:** Several features blocked-on-user for credentials (USER_TASKS.txt): Shopify (Step 9), Freshdesk (Step 10), Stripe billing (Step 22), S3 file uploads (Step 6 already works once keys exist), Celery beat jobs (14.1 inbox builder, 14.2 meeting prep, 14.4 weekly brief).
+**Last completed:** Industry signup + Intel Briefs feature (subagent for periodic public-web monitoring) + 5 legal/policy docs.
+**Next task:** Wire Celery beat schedule to auto-run active briefs every `frequency_minutes`. Then deliver the daily brief as an in-app toast or email digest.
+**Blocked by:** Same as before — Shopify/Freshdesk/Stripe/S3 credentials. OpenAI key would also unlock RAG embeddings + better intel synthesis.
 
 ---
 
@@ -297,6 +297,18 @@ _Add notes here as you make architecture decisions or discover issues_
 - 2026-05-20: Spec written. Provider-agnostic AI layer required — no direct Anthropic imports in business logic.
 - 2026-05-20: BYOAK model confirmed. Users bring their own API key (Anthropic/OpenAI/Groq/Mistral/Google).
 - 2026-05-20: Default personality = caveman (saves ~60% output tokens for users).
+- 2026-05-20: Industry + Intel Briefs shipped.
+  - users.industry added (alembic 0003), required at signup, free-text.
+  - intel_briefs + intel_brief_runs tables.
+  - Endpoints: GET/POST/PUT/DELETE /api/intel-briefs, POST /run, GET /runs, GET /runs/{rid}.
+  - Public sources: Reddit hot.json + HN Algolia (no auth). Fetched in parallel, polite UA.
+  - Synthesis via user's active JarvisAI provider, tight prompt (loud / attention / contrarian / actions).
+  - Auto-provisioned on signup: default "Industry chatter" brief + UserSettings + UserContext.
+  - PUT /api/users/me/industry back-fills for legacy users (idempotent provisioning).
+  - Cost recorded in token_usage — shows in Token Monitor like any other AI call.
+  - Frontend: industry input on register form, IntelBriefsPanel slide-in (🌐 button), run-now + history expansion.
+  - 5 legal docs in /legal/: PRIVACY_POLICY, TERMS_OF_SERVICE, AI_DISCLOSURE, COOKIE_POLICY, ACCEPTABLE_USE_POLICY. Industry-standard with TODO markers for company address + arbitration venue + abuse mailbox.
+  - First real-world run: D2C botanicals India brief fetched 56 Reddit items + 0 HN, synthesized for $0.0233. Claude correctly flagged that the topic didn't match the sources and recommended better source selection — accurate feedback loop.
 - 2026-05-20: Steps 21 + 3 complete (+ 3 of 4 BYOAK sub-tasks). Notes:
   - claude_client.py REMOVED. New entrypoint: backend/ai/jarvis_ai.py (JarvisAI class).
   - AIProvider abstraction in backend/ai/providers/{base,anthropic_provider,openai_provider,google_provider,factory}.py. OpenAICompatibleProvider covers OpenAI + Groq + Mistral via base_url.

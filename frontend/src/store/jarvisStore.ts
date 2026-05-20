@@ -47,7 +47,7 @@ interface JarvisState {
   toasts: ToastItem[];
   // Actions — auth
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string, industry: string) => Promise<void>;
   logout: () => void;
   // Actions — data
   setWakeState: (s: WakeState) => void;
@@ -109,12 +109,12 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
     set({ token: data.access_token, isAuthenticated: true, user: { email } });
   },
 
-  register: async (email, password) => {
+  register: async (email, password, industry) => {
     set({ authError: null });
     const r = await fetch(`${API}/api/users/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, industry }),
     });
     if (!r.ok) {
       const data = await r.json().catch(() => ({}));

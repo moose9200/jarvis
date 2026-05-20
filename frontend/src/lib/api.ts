@@ -151,6 +151,47 @@ export const DecisionsAPI = {
     }),
 };
 
+// ── Intel briefs ────────────────────────────────────────────────────────────
+
+export interface IntelBrief {
+  id: number;
+  name: string;
+  topic: string;
+  sources_json: any;
+  prompt_template: string | null;
+  frequency_minutes: number | null;
+  is_active: boolean;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  created_at: string | null;
+}
+
+export interface IntelBriefRun {
+  id: number;
+  brief_id: number;
+  status: "pending" | "running" | "done" | "failed";
+  output_text: string | null;
+  sources_summary: Record<string, number> | null;
+  error: string | null;
+  cost_usd: number;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export const IntelAPI = {
+  list: () => call<{ briefs: IntelBrief[] }>("/api/intel-briefs"),
+  create: (b: Partial<IntelBrief>) =>
+    call<IntelBrief>("/api/intel-briefs", { method: "POST", body: JSON.stringify(b) }),
+  update: (id: number, patch: Partial<IntelBrief>) =>
+    call<IntelBrief>(`/api/intel-briefs/${id}`, { method: "PUT", body: JSON.stringify(patch) }),
+  remove: (id: number) =>
+    call<{ ok: boolean }>(`/api/intel-briefs/${id}`, { method: "DELETE" }),
+  run: (id: number) =>
+    call<IntelBriefRun>(`/api/intel-briefs/${id}/run`, { method: "POST" }),
+  runs: (id: number, limit = 20) =>
+    call<{ runs: IntelBriefRun[] }>(`/api/intel-briefs/${id}/runs?limit=${limit}`),
+};
+
 // ── Chat meta ───────────────────────────────────────────────────────────────
 
 export const ChatMetaAPI = {

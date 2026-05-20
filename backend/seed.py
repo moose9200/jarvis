@@ -35,9 +35,9 @@ from models import (  # noqa: E402
 )
 
 SEED_USERS = [
-    {"email": "founder@test.com", "name": "Founder", "plan": "founder"},
-    {"email": "pro@test.com",     "name": "Pro",     "plan": "pro"},
-    {"email": "free@test.com",    "name": "Free",    "plan": "free"},
+    {"email": "founder@test.com", "name": "Founder", "plan": "founder", "industry": "D2C botanicals India"},
+    {"email": "pro@test.com",     "name": "Pro",     "plan": "pro",     "industry": "SaaS startup"},
+    {"email": "free@test.com",    "name": "Free",    "plan": "free",    "industry": "ecommerce"},
 ]
 DEFAULT_PASSWORD = "test1234"
 
@@ -46,11 +46,14 @@ def hash_pw(pw: str) -> str:
     return bcrypt.hashpw(pw.encode(), bcrypt.gensalt()).decode()
 
 
-def ensure_user(db, email: str) -> User:
+def ensure_user(db, email: str, industry: str | None = None) -> User:
     u = db.query(User).filter_by(email=email).first()
     if u:
+        if industry and not u.industry:
+            u.industry = industry
+            db.commit()
         return u
-    u = User(email=email, password_hash=hash_pw(DEFAULT_PASSWORD))
+    u = User(email=email, password_hash=hash_pw(DEFAULT_PASSWORD), industry=industry)
     db.add(u)
     db.commit()
     db.refresh(u)
@@ -138,7 +141,7 @@ def seed_token_history(db, user: User) -> None:
 def main() -> None:
     db = SessionLocal()
     try:
-        users = [ensure_user(db, u["email"]) for u in SEED_USERS]
+        users = [ensure_user(db, u["email"], u.get("industry")) for u in SEED_USERS]
         founder = users[0]
         seed_founder_persona(db, founder)
         seed_knowledge(db, founder)

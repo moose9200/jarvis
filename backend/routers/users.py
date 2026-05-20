@@ -28,6 +28,8 @@ bearer_scheme = HTTPBearer(auto_error=False)
 class RegisterIn(BaseModel):
     email: str = Field(..., min_length=3, max_length=120)
     password: str = Field(..., min_length=8, max_length=200)
+    industry: str = Field(..., min_length=2, max_length=120,
+                          description="Free-text industry label, e.g. 'D2C botanicals'. Required at signup.")
 
 
 class LoginIn(BaseModel):
@@ -43,7 +45,12 @@ class TokenOut(BaseModel):
 class UserOut(BaseModel):
     id: int
     email: str
+    industry: str | None = None
     created_at: datetime
+
+
+class IndustryIn(BaseModel):
+    industry: str = Field(..., min_length=2, max_length=120)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -110,11 +117,47 @@ def get_oauth_user(
 def register(request: Request, payload: RegisterIn, db: Session = Depends(get_db)):
     if db.query(User).filter_by(email=payload.email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
-    user = User(email=payload.email, password_hash=_hash(payload.password))
+    user = User(
+        email=payload.email,
+        password_hash=_hash(payload.password),
+        industry=payload.industry.strip(),
+    )
     db.add(user)
     db.commit()
     db.refresh(user)
+    _provision_defaults(db, user)
     return TokenOut(access_token=_create_token(user.id, user.email))
+
+
+def _provision_defaults(db: Session, user: User) -> None:
+    """Set up everything a brand-new user needs on first signup:
+      - default IntelBrief tied to their industry
+      - default UserSettings + UserContext rows (so /me + /context don't 404)
+    Each step is wrapped so a failure doesn't block the registration."""
+    # Local imports to avoid circular deps during app boot
+    from datetime import datetime as _dt
+
+    from intel.fetchers import default_sources_for_industry
+    from models import IntelBrief, UserContext, UserSettings
+
+    try:
+        if not db.query(UserSettings).filter_by(user_id=user.id).first():
+            db.add(UserSettings(user_id=user.id))
+        if not db.query(UserContext).filter_by(user_id=user.id).first():
+            db.add(UserContext(user_id=user.id))
+        if user.industry and not db.query(IntelBrief).filter_by(user_id=user.id).first():
+            db.add(IntelBrief(
+                user_id=user.id,
+                name="Industry chatter",
+                topic=user.industry,
+                sources_json=default_sources_for_industry(user.industry),
+                frequency_minutes=1440,        # daily
+                is_active=True,
+                created_at=_dt.utcnow(),
+            ))
+        db.commit()
+    except Exception:
+        db.rollback()
 
 
 @router.post("/login", response_model=TokenOut)
@@ -128,7 +171,32 @@ def login(request: Request, payload: LoginIn, db: Session = Depends(get_db)):
 
 @router.get("/me", response_model=UserOut)
 def me(current_user: User = Depends(get_current_user)):
-    return UserOut(id=current_user.id, email=current_user.email, created_at=current_user.created_at)
+    return UserOut(
+        id=current_user.id,
+        email=current_user.email,
+        industry=current_user.industry,
+        created_at=current_user.created_at,
+    )
+
+
+@router.put("/me/industry", response_model=UserOut)
+def set_industry(
+    payload: IndustryIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Set or update the user's industry. Used by legacy users registered
+    before industry became mandatory, and by the Settings → Account tab."""
+    current_user.industry = payload.industry.strip()
+    db.commit()
+    db.refresh(current_user)
+    _provision_defaults(db, current_user)
+    return UserOut(
+        id=current_user.id,
+        email=current_user.email,
+        industry=current_user.industry,
+        created_at=current_user.created_at,
+    )
 
 
 @router.post("/oauth-code")

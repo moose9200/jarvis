@@ -5,6 +5,7 @@ export function AuthPage() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [industry, setIndustry] = useState("");
   const [loading, setLoading] = useState(false);
 
   const login = useJarvisStore((s) => s.login);
@@ -17,7 +18,7 @@ export function AuthPage() {
     if (mode === "login") {
       await login(email, password);
     } else {
-      await register(email, password);
+      await register(email, password, industry);
     }
     setLoading(false);
   };
@@ -90,6 +91,26 @@ export function AuthPage() {
                 className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-white/20 focus:outline-none focus:border-[#00d4ff]/60 focus:bg-[#00d4ff]/5 transition-colors"
               />
             </div>
+
+            {mode === "register" && (
+              <div>
+                <label className="block text-white/40 text-xs uppercase tracking-wider mb-1.5">
+                  Industry <span className="text-jcyan/60 normal-case lowercase">(required)</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={industry}
+                  onChange={(e) => setIndustry(e.target.value)}
+                  placeholder="e.g. D2C botanicals, SaaS, fintech…"
+                  maxLength={120}
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-white/20 focus:outline-none focus:border-[#00d4ff]/60 focus:bg-[#00d4ff]/5 transition-colors"
+                />
+                <p className="text-white/30 text-[10px] mt-1">
+                  Powers your daily Intel Brief — what's noisy in your space.
+                </p>
+              </div>
+            )}
 
             <button
               type="submit"

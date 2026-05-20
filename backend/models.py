@@ -51,6 +51,7 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     email = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
+    industry = Column(String, nullable=True)  # free-text label; required at signup, drives default Intel Brief
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -271,3 +272,52 @@ class FreshdeskConfig(Base):
     api_key_encrypted = Column(Text)
 
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class IntelBrief(Base):
+    """Periodic industry / topic monitor.
+
+    A brief is a saved query that JARVIS can re-run on a schedule. The brief
+    describes:
+      - what topic to monitor (`topic`, free-form, e.g. "D2C botanicals India")
+      - where to look (`sources_json` — list of Reddit subs, HN, etc.)
+      - how often (`frequency_minutes` — None for manual-only)
+      - any extra prompt template
+
+    Default Intel Brief is created for every new user from their `industry`
+    field. They can edit/disable/delete it.
+    """
+    __tablename__ = "intel_briefs"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+
+    name = Column(String, nullable=False)            # human-readable, e.g. "Industry chatter"
+    topic = Column(String, nullable=False)           # the search subject
+    prompt_template = Column(Text, nullable=True)    # optional override of the synthesis prompt
+    sources_json = Column(JSON, nullable=True)       # {"reddit": ["r/Entrepreneur"], "hn": true}
+    frequency_minutes = Column(Integer, nullable=True)  # None = manual; e.g. 1440 for daily
+    is_active = Column(Boolean, default=True)
+
+    last_run_at = Column(DateTime, nullable=True)
+    next_run_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class IntelBriefRun(Base):
+    """One execution of an IntelBrief. Stores the produced report so the user
+    can browse history. Tied to brief_id and user_id for fast lookup."""
+    __tablename__ = "intel_brief_runs"
+
+    id = Column(Integer, primary_key=True)
+    brief_id = Column(Integer, ForeignKey("intel_briefs.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+
+    status = Column(String, default="pending")       # pending | running | done | failed
+    output_text = Column(Text, nullable=True)        # the AI-synthesized briefing
+    sources_summary = Column(JSON, nullable=True)    # {"reddit_items": 23, "hn_items": 7, ...}
+    error = Column(Text, nullable=True)
+    cost_usd = Column(Float, default=0.0)
+
+    started_at = Column(DateTime, default=datetime.utcnow)
+    finished_at = Column(DateTime, nullable=True)
