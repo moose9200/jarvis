@@ -163,28 +163,40 @@ Document references: see `docs/BUILD_PROGRESS.md` for full step-by-step status.
 
 Pick the top item; ship; move to "Done"; commit.
 
-1. **Step 20** — Write `backend/.env.example` (10 min). No blocker.
-2. **Step 23.6** — `.gitignore` audit + additions (5 min).
-3. **Step 23.5** — `backend/.env.dev` template (5 min).
-4. **Celery beat service** — Add `worker-beat` to compose. Schedule the active IntelBriefs auto-run loop (every `frequency_minutes`). One commit unlocks 14.1, 14.2, 14.4 patterns.
-5. **Step 5.3 / 5.4** — Streaming chat in DraggableChat. SSE reader + cancel button (~30 min).
-6. **Step 6.7** — Paperclip + drag-drop file upload UI (~45 min). 402 until user adds S3, that's fine.
-7. **Step 7.4 / 7.5** — Inline PersonalityModeSelector + QuickActionChips above chat input (~20 min).
-8. **Step 15** — `IntelligenceTierSelector` pills above chat if desired (~15 min).
-9. **Step 16, 17** — Cleanup audit (1 hr combined).
-10. **Step 14.1 builder** — Once Celery beat is live, write `build_decision_inbox` task pulling from GitHub PRs (`GitHubConnector` already exists, has read methods). ~30 min.
-11. **Step 14.3** — Email-commitment Celery task. Needs scheduled Gmail/Outlook ingest first (8.6 ingest_emails — also blocked on OPENAI_API_KEY for embeddings).
-12. **Step 23.3** — Mock OAuth server (~45 min). Useful for E2E tests but not blocking real users.
-13. **Step 9 — Shopify** — UNBLOCK when SHOPIFY_CLIENT_ID is set.
-14. **Step 10 — Freshdesk** — UNBLOCK when FRESHDESK_API_KEY is set.
-15. **Step 22 — Stripe** — UNBLOCK when STRIPE_SECRET_KEY is set.
-16. **Step 25 — Live deploy** — UNBLOCK when Railway/Render account exists.
-17. **Step 26** — Phase 2 unicorn features. Defer until paying users.
+**Unblocked, ready to ship:**
+
+1. **Step 14.3** — Email-commitment Celery task. Needs scheduled Gmail/Outlook ingest first (Step 8.6 ingest_emails — needs OPENAI_API_KEY for embeddings).
+2. **Step 14.2** — Smart meeting-prep Celery task. Fires 20 min before each calendar event. Needs calendar-fetch loop + reliable scheduling per-event (currently no easy way to schedule one-off tasks; would need celery-beat dynamic schedule or a periodic scanner).
+3. **Step 14.4** — Weekly business brief Celery beat at Monday 8am UTC. Synthesises Shopify week-on-week + Freshdesk volume + Linear completion + email throughput → top-3 priorities. Blocked on Shopify + Freshdesk being live.
+4. **Step 8.6** — Celery ingest tasks: ingest_emails / ingest_tasks / ingest_shopify / ingest_file. Pulls connector data → embeds → upserts KnowledgeChunk. Needs OPENAI_API_KEY for embeddings (or fallback to per-provider).
+5. **mock-oauth wiring** — `MOCK_OAUTH=true` env switch in routers/auth.py that points all `/authorize` + `/token` URLs at the mock server. ~30 min.
+6. **JWT refresh endpoint** — 30d → 7d access token + 30d refresh token. POST /api/users/refresh. Needs RefreshToken table + frontend silent-refresh logic. ~1 hr.
+7. **Connector token auto-refresh** — Each connector's `access()` should catch 401 → use stored refresh_token → retry. Per-provider logic (Google/Microsoft use OAuth2 refresh). ~3 hr.
+8. **feed.py Redis cache** — 2-min TTL per user. /feed hits 11 APIs per call; should hit cache instead. ~30 min.
+9. **slowapi per-user keying** — When authenticated, rate-limit by user_id, not IP. ~20 min.
+
+**Blocked on user credentials:**
+
+10. **Step 9 — Shopify** — UNBLOCK when SHOPIFY_CLIENT_ID is set (USER_TASKS #6).
+11. **Step 10 — Freshdesk** — UNBLOCK when FRESHDESK_API_KEY is set (USER_TASKS #7).
+12. **Step 22 — Stripe** — UNBLOCK when STRIPE_SECRET_KEY is set (USER_TASKS #8).
+13. **Step 25 — Live deploy** — UNBLOCK when Railway/Render account exists (USER_TASKS #10).
+
+**Phase 2 (defer until paying users):**
+
+14. **Step 26** — Unicorn features: persistent memories, relationship graph, platform API, cash-flow watch, achievements, weekly digest email, white-label config.
+15. **Step 27** — Growth / viral mechanics.
 
 ---
 
 ## Done log (move items here as they ship)
 
+- 2026-05-20 7fdf358: queue 12 — mock-oauth FastAPI server (port 9100, single-use codes, canned API data)
+- 2026-05-20 78eb2b0: queue 10 — build_decision_inbox Celery task + 15-min beat schedule
+- 2026-05-20 6cfce57: queue 9 — Step 16/17 cleanup (JWT_SECRET hard requirement, VITE_API_BASE env)
+- 2026-05-20 686a603: queue 5/6/7/8 — streaming SSE chat UI + cancel + paperclip+drag-drop upload + tier pills + personality cycler + quick-action chips
+- 2026-05-20 3cada91: queue 4 — Celery beat service + intel.run_due 10-min schedule
+- 2026-05-20 2048977: queue 1/2/3 — .env.example + .env.dev + hardened .gitignore
 - 2026-05-20 b769046: Industry signup + Intel Briefs + 5 legal docs
 - 2026-05-20 a03b2f3: Step 25 deployment runbook (docs only)
 - 2026-05-20 030c7b2: Step 14 decision inbox + push_to_github tool
