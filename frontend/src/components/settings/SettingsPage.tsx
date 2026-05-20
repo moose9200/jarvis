@@ -40,13 +40,20 @@ const TIERS: { id: Tier; label: string; desc: string; cost: string }[] = [
   { id: "scientist",   label: "Scientist",   desc: "Deep thinking on hard problems.",       cost: "$15/M in" },
 ];
 
+// Skill catalogue — matches backend ai/persona.py SKILLS dict.
+// 1 default (All Purpose) + 10 popular Anthropic Claude use cases.
 const PERSONALITIES: { id: Personality; label: string; tag: string }[] = [
-  { id: "caveman",         label: "Caveman",         tag: "Default · saves tokens" },
-  { id: "expert",          label: "Expert",          tag: "Structured analysis" },
-  { id: "creative",        label: "Creative",        tag: "Lateral thinking" },
-  { id: "executive",       label: "Executive",       tag: "Decision-focused" },
-  { id: "devils_advocate", label: "Devil's Advocate", tag: "Challenge assumptions" },
-  { id: "coach",           label: "Coach",           tag: "Socratic Q&A" },
+  { id: "all_purpose",     label: "All Purpose",      tag: "Balanced default" },
+  { id: "coder",           label: "Coder",            tag: "Senior software engineer" },
+  { id: "designer",        label: "Designer",         tag: "UI/UX + design systems" },
+  { id: "writer",          label: "Writer",           tag: "Long-form content" },
+  { id: "marketer",        label: "Marketer",         tag: "Growth + GTM" },
+  { id: "founder",         label: "Founder",          tag: "Strategy + decisions" },
+  { id: "researcher",      label: "Researcher",       tag: "Analysis + citations" },
+  { id: "analyst",         label: "Analyst",          tag: "Data + metrics" },
+  { id: "coach",           label: "Coach",            tag: "Socratic Q&A" },
+  { id: "devils_advocate", label: "Devil's Advocate", tag: "Challenges assumptions" },
+  { id: "creative",        label: "Creative",         tag: "Lateral thinking" },
 ];
 
 export function SettingsPage({ open, onClose }: Props) {

@@ -80,7 +80,7 @@ def seed_founder_persona(db, user: User) -> None:
         db.add(settings)
     settings.ai_provider = "anthropic"
     settings.default_model = "intelligent"
-    settings.personality_mode = "caveman"
+    settings.personality_mode = "coder"
     settings.response_length = "detailed"
     settings.daily_token_budget = 200_000
 

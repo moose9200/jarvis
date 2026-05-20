@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from ai.exceptions import NoAPIKeyError, TokenBudgetExceededError
 from ai.jarvis_ai import JarvisAI
-from ai.persona import PERSONALITY_INJECTIONS, DEFAULT_PERSONALITY
+from ai.persona import DEFAULT_PERSONALITY, list_skills
 from database import get_db
 from models import User
 from routers.users import get_current_user
@@ -193,11 +193,13 @@ def all_panel_suggestions(current_user: User = Depends(get_current_user)):
 
 @router.get("/chat/personalities")
 def personalities(current_user: User = Depends(get_current_user)):
-    """All available personality modes + their style descriptors."""
+    """All available skill modes + their style descriptors.
+
+    Returns 11 entries: `all_purpose` (default) plus the 10 popular skills:
+    coder, designer, writer, marketer, founder, researcher, analyst, coach,
+    devils_advocate, creative. Each entry has id + label + one-line tag
+    + first 240 chars of the system-prompt injection (for tooltips)."""
     return {
         "default": DEFAULT_PERSONALITY,
-        "modes": [
-            {"id": k, "label": k.replace("_", " ").title(), "style": v[:200]}
-            for k, v in PERSONALITY_INJECTIONS.items()
-        ],
+        "modes": list_skills(),
     }

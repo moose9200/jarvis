@@ -237,7 +237,7 @@ export const IntelAPI = {
 export const ChatMetaAPI = {
   personalities: () => call<{
     default: string;
-    modes: Array<{ id: string; label: string; style: string }>;
+    modes: Array<{ id: string; label: string; tag: string; style: string }>;
   }>("/api/chat/personalities"),
 
   quickActions: () => call<{

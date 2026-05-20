@@ -66,7 +66,17 @@ export interface ToastItem {
 export type AIProvider = "anthropic" | "openai" | "groq" | "mistral" | "google";
 export type Tier = "eco" | "intelligent" | "scientist";
 export type Personality =
-  | "caveman" | "expert" | "creative" | "executive" | "devils_advocate" | "coach";
+  | "all_purpose"
+  | "coder"
+  | "designer"
+  | "writer"
+  | "marketer"
+  | "founder"
+  | "researcher"
+  | "analyst"
+  | "coach"
+  | "devils_advocate"
+  | "creative";
 
 export interface UserSettingsSnapshot {
   ai_provider: AIProvider;

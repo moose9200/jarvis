@@ -132,7 +132,7 @@ class UserSettings(Base):
     ai_provider = Column(String, default="anthropic")
     default_model = Column(String, default="intelligent")  # eco/intelligent/scientist or model id
     response_length = Column(String, default="detailed")   # brief/detailed/deep
-    personality_mode = Column(String, default="caveman")   # caveman/normal/coach/...
+    personality_mode = Column(String, default="all_purpose")  # see ai/persona.py SKILLS
 
     daily_token_budget = Column(Integer, default=100_000)
     budget_alert_pct = Column(Integer, default=80)
