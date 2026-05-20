@@ -1,6 +1,8 @@
 # JARVIS Build Progress Tracker
 
 > Claude Code: Read this first every session. Update after every sub-task. Commit after every step.
+>
+> **For pending work + priority queue: see `docs/PENDING_AUDIT.md`. That is the work queue. Pick the top item, ship, move it to Done.**
 
 ## Current Status
 **Last session:** 2026-05-20  
