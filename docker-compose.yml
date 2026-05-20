@@ -37,6 +37,7 @@ services:
     environment:
       DATABASE_URL: postgresql://jarvis:${POSTGRES_PASSWORD:-jarvis-dev-pw}@postgres:5432/jarvis
       REDIS_URL: redis://redis:6379/0
+      PYTHONPATH: /app
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,11 +53,33 @@ services:
     environment:
       DATABASE_URL: postgresql://jarvis:${POSTGRES_PASSWORD:-jarvis-dev-pw}@postgres:5432/jarvis
       REDIS_URL: redis://redis:6379/0
+      PYTHONPATH: /app
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    restart: unless-stopped
+
+  # Celery beat — single-instance scheduler. Drives intel.run_due every 10 min
+  # plus any other periodic tasks declared in worker.celery_app.conf.beat_schedule.
+  # IMPORTANT: only ONE beat container should ever run, otherwise jobs duplicate.
+  beat:
+    build: ./backend
+    command: celery -A worker beat --loglevel=info
+    env_file:
+      - backend/.env
+    environment:
+      DATABASE_URL: postgresql://jarvis:${POSTGRES_PASSWORD:-jarvis-dev-pw}@postgres:5432/jarvis
+      REDIS_URL: redis://redis:6379/0
+      PYTHONPATH: /app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      worker:
+        condition: service_started
     restart: unless-stopped
 
   frontend:

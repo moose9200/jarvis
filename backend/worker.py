@@ -32,10 +32,12 @@ celery_app = Celery(
     broker=REDIS_URL,
     backend=REDIS_URL,
     include=[
+        "tasks.intel",          # IntelBrief auto-runs
         # Add task modules here as new background jobs are built:
         # "tasks.email_ingest",
         # "tasks.shopify_sync",
         # "tasks.knowledge_indexer",
+        # "tasks.decision_inbox",
     ],
 )
 
@@ -50,6 +52,19 @@ celery_app.conf.update(
     worker_max_tasks_per_child=200,  # recycle workers to fight slow leaks
     broker_connection_retry_on_startup=True,
 )
+
+
+# ── Beat schedule ────────────────────────────────────────────────────────────
+# Every 10 min, scan for IntelBriefs whose frequency_minutes have elapsed
+# since last_run_at and enqueue them. Beat runs as its own service (see
+# docker-compose `beat` service). Without beat running, briefs only run when
+# the user hits POST /api/intel-briefs/{id}/run from the UI.
+celery_app.conf.beat_schedule = {
+    "intel-run-due-every-10-min": {
+        "task": "intel.run_due",
+        "schedule": 600.0,   # seconds
+    },
+}
 
 
 @celery_app.task(name="diagnostics.ping")
