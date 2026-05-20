@@ -9,7 +9,7 @@ class GmailConnector(Connector):
     BASE = "https://gmail.googleapis.com/gmail/v1/users/me"
 
     async def fetch(self, max_results: int = 25, **_):
-        tok = self.access()
+        tok = await self.access_fresh()
         if not tok:
             return []
         headers = {"Authorization": f"Bearer {tok}"}
@@ -46,7 +46,7 @@ class GmailConnector(Connector):
             return out
 
     async def send(self, to: str, subject: str, body: str) -> bool:
-        tok = self.access()
+        tok = await self.access_fresh()
         if not tok:
             return False
         msg = MIMEText(body)

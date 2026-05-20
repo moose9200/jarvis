@@ -26,6 +26,16 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (t) headers.set("Authorization", `Bearer ${t}`);
 
   const r = await fetch(`${BASE}${path}`, { ...init, headers });
+  if (r.status === 401 && t) {
+    // Our JWT was rejected. Clear localStorage + the storage event fires in
+    // other tabs so they sign out too. The App.tsx storage-event listener
+    // handles the in-tab redirect to AuthPage.
+    localStorage.removeItem("jarvis_token");
+    // Manually fire a storage event for the CURRENT tab (storage doesn't
+    // fire in the writer). The window dispatches a synthetic event.
+    window.dispatchEvent(new StorageEvent("storage", { key: "jarvis_token", newValue: null }));
+    throw new ApiError(401, "Session expired. Sign in again.");
+  }
   if (!r.ok) {
     let detail = "";
     try {

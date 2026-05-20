@@ -7,7 +7,7 @@ class OutlookCalendarConnector(Connector):
     provider = "outlook_calendar"
 
     async def fetch(self, days: int = 1, **_):
-        tok = self.access()
+        tok = await self.access_fresh()
         if not tok:
             return []
         now = datetime.now(timezone.utc)

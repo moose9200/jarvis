@@ -7,7 +7,7 @@ class OutlookMailConnector(Connector):
     BASE = "https://graph.microsoft.com/v1.0"
 
     async def fetch(self, top: int = 25, **_):
-        tok = self.access()
+        tok = await self.access_fresh()
         if not tok:
             return []
         async with httpx.AsyncClient(timeout=15) as c:
@@ -33,7 +33,7 @@ class OutlookMailConnector(Connector):
         return out
 
     async def send(self, to: str, subject: str, body: str) -> bool:
-        tok = self.access()
+        tok = await self.access_fresh()
         if not tok:
             return False
         async with httpx.AsyncClient(timeout=15) as c:

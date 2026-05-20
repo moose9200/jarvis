@@ -56,9 +56,38 @@ export default function App() {
   const [showIntel, setShowIntel] = useState(false);
 
   // All hooks before conditional return
+  const validateSession = useJarvisStore((s) => s.validateSession);
+  const logout = useJarvisStore((s) => s.logout);
+
+  // On boot (and when auth state flips), validate the JWT against the server.
+  // If the token is stale (e.g. left over from a previous dev login under a
+  // different account), this clears it and forces a fresh sign-in — prevents
+  // OAuth flows from minting codes for the wrong user.
   useEffect(() => {
-    if (isAuthenticated) fetchConnectors();
-  }, [fetchConnectors, isAuthenticated]);
+    if (isAuthenticated) {
+      validateSession().then((ok) => {
+        if (ok) fetchConnectors();
+      });
+    }
+  }, [validateSession, fetchConnectors, isAuthenticated]);
+
+  // Multi-tab sync: another tab logging in/out → propagate. The `storage`
+  // event fires in OTHER tabs (not the one that wrote). Keeps the
+  // in-memory token aligned with localStorage so cross-tab state stays sane.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== "jarvis_token") return;
+      if (!e.newValue) {
+        // Token cleared in another tab → log this one out too.
+        logout();
+      } else {
+        // Different / refreshed token in another tab → re-validate here.
+        validateSession();
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [logout, validateSession]);
 
   // Handle OAuth return params (?connected=X or ?error=not_configured&provider=X)
   useEffect(() => {

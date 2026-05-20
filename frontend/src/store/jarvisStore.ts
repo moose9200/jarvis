@@ -49,6 +49,10 @@ interface JarvisState {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, industry: string) => Promise<void>;
   logout: () => void;
+  /** Hit /api/users/me with the current token. If 401, clear localStorage
+   *  and flip isAuthenticated to false — kicks stale JWT sessions left
+   *  over from old dev logins. Returns true if the token is still valid. */
+  validateSession: () => Promise<boolean>;
   // Actions — data
   setWakeState: (s: WakeState) => void;
   setMode: (m: Mode) => void;
@@ -139,6 +143,40 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
   logout: () => {
     localStorage.removeItem("jarvis_token");
     set({ token: null, user: null, isAuthenticated: false });
+  },
+
+  validateSession: async () => {
+    // Re-read from localStorage — covers multi-tab case where another tab
+    // logged in as a different user and updated the storage. Our in-memory
+    // copy may be a stale token from an older session.
+    const fresh = typeof window !== "undefined" ? localStorage.getItem("jarvis_token") : null;
+    if (fresh && fresh !== get().token) {
+      set({ token: fresh });
+    }
+    const token = fresh || get().token;
+    if (!token) {
+      set({ token: null, user: null, isAuthenticated: false });
+      return false;
+    }
+    try {
+      const r = await fetch(`${API}/api/users/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (r.status === 401) {
+        // Stale / revoked JWT — drop it. Forces a fresh login + prevents
+        // OAuth flows from minting one-time codes for the wrong user.
+        localStorage.removeItem("jarvis_token");
+        set({ token: null, user: null, isAuthenticated: false });
+        return false;
+      }
+      if (!r.ok) return false;
+      const u = await r.json();
+      set({ user: { email: u.email } });
+      return true;
+    } catch {
+      // Network failure — assume token still good; we'll re-check next boot.
+      return true;
+    }
   },
 
   // ── Data actions ──────────────────────────────────────────────────────────

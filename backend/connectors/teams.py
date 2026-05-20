@@ -6,7 +6,7 @@ class TeamsConnector(Connector):
     provider = "teams"
 
     async def fetch(self, top: int = 15, **_):
-        tok = self.access()
+        tok = await self.access_fresh()
         if not tok:
             return []
         async with httpx.AsyncClient(timeout=15) as c:
