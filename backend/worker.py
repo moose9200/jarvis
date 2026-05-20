@@ -33,11 +33,11 @@ celery_app = Celery(
     backend=REDIS_URL,
     include=[
         "tasks.intel",          # IntelBrief auto-runs
+        "tasks.decisions",      # Decision Inbox builder
         # Add task modules here as new background jobs are built:
         # "tasks.email_ingest",
         # "tasks.shopify_sync",
         # "tasks.knowledge_indexer",
-        # "tasks.decision_inbox",
     ],
 )
 
@@ -63,6 +63,10 @@ celery_app.conf.beat_schedule = {
     "intel-run-due-every-10-min": {
         "task": "intel.run_due",
         "schedule": 600.0,   # seconds
+    },
+    "decisions-build-every-15-min": {
+        "task": "decisions.build_for_all",
+        "schedule": 900.0,   # 15 minutes
     },
 }
 

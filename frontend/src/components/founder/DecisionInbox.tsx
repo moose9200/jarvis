@@ -23,6 +23,7 @@ interface Props {
 
 const SOURCE_LABELS: Record<string, { icon: string; label: string }> = {
   github_pr:        { icon: "🐙", label: "GitHub PR" },
+  github_issue:     { icon: "🐙", label: "GitHub issue" },
   shopify_order:    { icon: "🛒", label: "Shopify order" },
   freshdesk_ticket: { icon: "🎫", label: "Freshdesk ticket" },
   linear_issue:     { icon: "📐", label: "Linear" },
