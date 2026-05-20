@@ -9,6 +9,15 @@ version: "3.9"
 # outside containers.
 
 services:
+  # mock-oauth — only starts when --profile mock is passed:
+  #   docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile mock up
+  mock-oauth:
+    profiles: ["mock"]
+    build: ./tools/mock-oauth
+    ports:
+      - "9100:9100"
+    restart: unless-stopped
+
   postgres:
     ports:
       - "5433:5432"   # 5433 to avoid colliding with host postgres
