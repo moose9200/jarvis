@@ -266,12 +266,13 @@ After each full step: git commit with message `step X: description`.
 ---
 
 ## STEP 25 — Deployment
-- [ ] 25.1 Staging environment on Railway/Render
-- [ ] 25.2 Production environment configured
-- [ ] 25.3 Enhanced /api/health checks (DB + Redis)
-- [ ] 25.4 Alembic runs in Dockerfile CMD before app start
-- [ ] 25.5 Blue-green deploy tested
-- [ ] 25.6 Domain + Cloudflare configured (user does this)
+- [ ] 25.1 Staging environment on Railway/Render — USER TODO (provision account; runbook in docs/DEPLOYMENT.md)
+- [ ] 25.2 Production environment configured — USER TODO
+- [x] 25.3 Enhanced /api/health checks (DB + Redis + Storage) — done in Step 1
+- [x] 25.4 Alembic runs in Dockerfile CMD before app start — done in Step 1
+- [ ] 25.5 Blue-green deploy tested — USER TODO (one-click rollback in Railway/Render)
+- [ ] 25.6 Domain + Cloudflare configured — USER TODO (#4, #5 in USER_TASKS.txt)
+- [x] BONUS: docs/DEPLOYMENT.md — full runbook (first-time setup, routine deploys, zero-downtime migration rules, rollback, monitoring, secret rotation, pre-launch checklist).
 
 **Commit:** `git commit -m "step 25: production deployment setup"`
 
