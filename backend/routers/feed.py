@@ -40,10 +40,10 @@ async def feed(db: Session = Depends(get_db), current_user: User = Depends(get_c
     ) = await asyncio.gather(
         _safe(_c(GmailConnector).fetch(max_results=25)),
         _safe(_c(OutlookMailConnector).fetch(top=25)),
-        # 7-day window — "Calendar" panel should show the upcoming week,
-        # not just the next 24 hours (most users have empty same-day calendars).
-        _safe(_c(GoogleCalendarConnector).fetch(days=7)),
-        _safe(_c(OutlookCalendarConnector).fetch(days=7)),
+        # 14-day window — picks up the next ~2 weeks of events. Same-day-only
+        # is too narrow (most users have empty same-day calendars by mid-day).
+        _safe(_c(GoogleCalendarConnector).fetch(days=14)),
+        _safe(_c(OutlookCalendarConnector).fetch(days=14)),
         _safe(_c(SlackConnector).fetch()),
         _safe(_c(TeamsConnector).fetch()),
         _safe(_c(WhatsAppConnector).fetch()),

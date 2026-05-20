@@ -22,9 +22,12 @@ export function CalendarPanel() {
       panelKey="calendar"
     >
       {events.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-6 gap-2">
+        <div className="flex flex-col items-center justify-center py-6 gap-1.5 text-center px-2">
           <span className="text-2xl opacity-20">📅</span>
-          <span className="text-white/30 text-xs">No events today</span>
+          <span className="text-white/40 text-xs">No events in the next 2 weeks.</span>
+          <span className="text-white/20 text-[10px]">
+            Connected calendars sync automatically. If you just connected, give it a moment.
+          </span>
         </div>
       )}
       {events.map((e) => {
