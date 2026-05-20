@@ -176,7 +176,7 @@ class JarvisAI:
         self.memory.append("assistant", fallback)
         return {"text": fallback, "usage": self._format_usage(agg)}
 
-    async def stream(self, user_message: str) -> AsyncIterator[dict]:
+    async def stream(self, user_message: str, file_ids: Optional[list[int]] = None) -> AsyncIterator[dict]:
         """Streaming variant of respond(). Yields plain dicts:
             {"type": "token", "text": "..."}     — per-token delta
             {"type": "done",  "usage": {...}}    — final usage + cost
@@ -184,13 +184,22 @@ class JarvisAI:
 
         Tool calls are NOT supported in streaming mode (yet) — the SSE path
         is for fast text answers. Callers needing tools should use respond().
+        File attachments ARE supported: file_ids resolve into multimodal
+        content the same way respond() does.
         """
-        self.memory.append("user", user_message)
+        memory_content = self._memory_text(user_message, file_ids or [])
+        self.memory.append("user", memory_content)
         await self.memory.maybe_compress()
 
         knowledge_block = await self._build_knowledge_block(user_message)
         system_text = self._build_system_text(knowledge_block=knowledge_block)
         messages: list[AIMessage] = self._build_message_history()
+        if file_ids:
+            multimodal = self._build_multimodal_content(user_message, file_ids)
+            if messages and messages[-1].role == "user":
+                messages[-1] = AIMessage(role="user", content=multimodal)
+            else:
+                messages.append(AIMessage(role="user", content=multimodal))
 
         full_text_parts: list[str] = []
         final_usage: dict | None = None

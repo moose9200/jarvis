@@ -97,7 +97,7 @@ async def chat_stream(
 
     async def generate():
         try:
-            async for chunk in client.stream(payload.message):
+            async for chunk in client.stream(payload.message, file_ids=payload.file_ids):
                 yield f"data: {json.dumps(chunk)}\n\n"
             yield "data: [DONE]\n\n"
         except Exception:

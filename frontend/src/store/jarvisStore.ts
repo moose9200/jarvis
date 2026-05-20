@@ -55,6 +55,16 @@ interface JarvisState {
   fetchFeed: () => Promise<void>;
   fetchConnectors: () => Promise<void>;
   sendChat: (text: string) => Promise<string>;
+  streamChat: (
+    text: string,
+    callbacks: {
+      onToken?: (delta: string) => void;
+      onDone?: (usage: any) => void;
+      onError?: (error: string) => void;
+    },
+    signal?: AbortSignal,
+    file_ids?: number[],
+  ) => Promise<void>;
   appendChat: (turn: ChatTurn) => void;
   // Actions — UI
   setPanelVisibility: (key: PanelKey, visible: boolean) => void;
@@ -190,6 +200,77 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
       get().appendChat({ role: "assistant", text: reply, timestamp: Date.now() });
       set({ wakeState: "idle" });
       return reply;
+    }
+  },
+
+  streamChat: async (text, callbacks, signal, file_ids) => {
+    const { token } = get();
+    get().appendChat({ role: "user", text, timestamp: Date.now() });
+    set({ wakeState: "processing" });
+    try {
+      const r = await fetch(`${API}/api/chat/stream`, {
+        method: "POST",
+        headers: authHeaders(token),
+        body: JSON.stringify({ message: text, file_ids: file_ids || [] }),
+        signal,
+      });
+      if (!r.ok || !r.body) {
+        const errMsg = `HTTP ${r.status}`;
+        callbacks.onError?.(errMsg);
+        set({ wakeState: "idle" });
+        return;
+      }
+
+      const reader = r.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let assembled = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+
+        // SSE messages are separated by \n\n
+        let nl;
+        while ((nl = buf.indexOf("\n\n")) >= 0) {
+          const event = buf.slice(0, nl).trim();
+          buf = buf.slice(nl + 2);
+          if (!event.startsWith("data:")) continue;
+          const payload = event.slice(5).trim();
+          if (payload === "[DONE]") {
+            // graceful end
+            continue;
+          }
+          try {
+            const parsed = JSON.parse(payload);
+            if (parsed.type === "token" && parsed.text) {
+              assembled += parsed.text;
+              callbacks.onToken?.(parsed.text);
+            } else if (parsed.type === "done") {
+              callbacks.onDone?.(parsed.usage || {});
+            } else if (parsed.type === "error") {
+              callbacks.onError?.(parsed.text || "stream error");
+            }
+          } catch {
+            // ignore malformed chunk
+          }
+        }
+      }
+
+      // Persist assistant turn to local chat history
+      if (assembled) {
+        get().appendChat({ role: "assistant", text: assembled, timestamp: Date.now() });
+      }
+      set({ wakeState: "responding" });
+      setTimeout(() => set({ wakeState: "idle" }), 800);
+    } catch (e: any) {
+      if (e?.name === "AbortError") {
+        callbacks.onError?.("aborted");
+      } else {
+        callbacks.onError?.(e?.message || "network error");
+      }
+      set({ wakeState: "idle" });
     }
   },
 

@@ -1,6 +1,8 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { motion, useDragControls } from "framer-motion";
+import { FilesAPI, type FileRow } from "../../lib/api";
 import { useJarvisStore } from "../../store/jarvisStore";
+import { InlineChatControls } from "./InlineChatControls";
 
 const MIN_W = 320;
 const MIN_H = 220;
@@ -9,13 +11,21 @@ const DEFAULT_H = 380;
 
 export function DraggableChat() {
   const chat = useJarvisStore((s) => s.chat);
-  const sendChat = useJarvisStore((s) => s.sendChat);
+  const streamChat = useJarvisStore((s) => s.streamChat);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [streamingText, setStreamingText] = useState("");
+  const [lastUsage, setLastUsage] = useState<any>(null);
+  const [attachments, setAttachments] = useState<FileRow[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const addToast = useJarvisStore((s) => s.addToast);
   const [minimized, setMinimized] = useState(false);
   const [size, setSize] = useState({ w: DEFAULT_W, h: DEFAULT_H });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const constraintRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   // framer-motion drag controls — drag only starts from the header handle
   const dragControls = useDragControls();
@@ -45,9 +55,67 @@ export function DraggableChat() {
     e.preventDefault();
     if (!input.trim() || busy) return;
     setBusy(true);
+    setStreamingText("");
+    setLastUsage(null);
     const v = input;
     setInput("");
-    try { await sendChat(v); } finally { setBusy(false); }
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    const fileIds = attachments.map((a) => a.id);
+
+    try {
+      await streamChat(
+        v,
+        {
+          onToken: (delta) => setStreamingText((s) => s + delta),
+          onDone:  (usage) => setLastUsage(usage),
+          onError: (err)   => setStreamingText((s) => s + `\n\n[stream error: ${err}]`),
+        },
+        controller.signal,
+        fileIds,
+      );
+    } finally {
+      abortRef.current = null;
+      setStreamingText("");   // assistant message now in chat history
+      setAttachments([]);     // attachments consumed by this turn
+      setBusy(false);
+    }
+  };
+
+  const cancelStream = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+  };
+
+  const uploadFiles = async (fileList: FileList | File[] | null) => {
+    if (!fileList) return;
+    setUploading(true);
+    try {
+      for (const f of Array.from(fileList)) {
+        try {
+          const row = await FilesAPI.upload(f);
+          setAttachments((a) => [...a, row]);
+          addToast({ type: "success", message: `Attached ${row.filename}` });
+        } catch (e) {
+          addToast({ type: "error", message: `Upload failed: ${(e as Error).message}` });
+        }
+      }
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (e.dataTransfer?.files?.length) uploadFiles(e.dataTransfer.files);
+  };
+
+  const removeAttachment = (id: number) => {
+    setAttachments((a) => a.filter((f) => f.id !== id));
+    FilesAPI.remove(id).catch(() => {/* best-effort */});
   };
 
   // Resize: starts from the corner handle, entirely independent of drag
@@ -158,22 +226,72 @@ export function DraggableChat() {
               ))}
               {busy && (
                 <div className="flex gap-2 justify-start">
-                  <div className="w-5 h-5 rounded-full bg-jcyan/20 border border-jcyan/40 flex items-center justify-center text-jcyan text-[10px] shrink-0">
+                  <div className="w-5 h-5 rounded-full bg-jcyan/20 border border-jcyan/40 flex items-center justify-center text-jcyan text-[10px] shrink-0 mt-0.5">
                     J
                   </div>
-                  <div className="px-3 py-2 rounded-xl rounded-tl-sm bg-white/5 border border-white/10">
-                    <ThinkingDots />
+                  <div className="max-w-[80%] px-3 py-2 rounded-xl rounded-tl-sm bg-white/5 border border-white/10 text-white/90 text-sm leading-relaxed whitespace-pre-wrap break-words">
+                    {streamingText || <ThinkingDots />}
+                    <span className="inline-block w-1.5 h-3 bg-jcyan/60 animate-pulse ml-0.5 align-middle" />
                   </div>
+                </div>
+              )}
+              {!busy && lastUsage && (
+                <div className="text-[10px] text-white/30 text-right pr-1 -mt-1">
+                  {lastUsage.provider}/{lastUsage.model} · {lastUsage.input}+{lastUsage.output} tok · ${(lastUsage.cost_usd ?? 0).toFixed(4)}
                 </div>
               )}
               <div ref={messagesEndRef} />
             </div>
 
-            {/* ── Input ── */}
+            {/* ── Inline controls (tier pills + personality + quick actions) ── */}
+            <InlineChatControls onPick={(prompt) => setInput(prompt)} />
+
+            {/* ── Attachment chips (shown above input when files queued) ── */}
+            {attachments.length > 0 && (
+              <div className="px-3 pt-2 flex flex-wrap gap-1 shrink-0">
+                {attachments.map((a) => (
+                  <span
+                    key={a.id}
+                    className="flex items-center gap-1.5 text-[10px] text-jcyan bg-jcyan/10 border border-jcyan/30 px-2 py-1 rounded-full"
+                  >
+                    📎 {a.filename}
+                    <button
+                      type="button"
+                      onClick={() => removeAttachment(a.id)}
+                      className="text-jcyan/60 hover:text-jurgent ml-0.5"
+                    >✕</button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* ── Input + drop zone ── */}
             <form
               onSubmit={submit}
-              className="border-t border-jcyan/30 p-3 flex gap-2 shrink-0 rounded-b-xl"
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={onDrop}
+              className={`border-t p-3 flex gap-2 shrink-0 rounded-b-xl items-center transition-colors ${
+                dragOver ? "border-jcyan bg-jcyan/10" : "border-jcyan/30"
+              }`}
             >
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={(e) => uploadFiles(e.target.files)}
+                multiple
+                className="hidden"
+                accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.txt,.csv,.md"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={busy || uploading}
+                title="Attach files"
+                className="px-2.5 py-2 text-white/40 hover:text-jcyan transition-colors text-base disabled:opacity-30"
+              >
+                {uploading ? "…" : "📎"}
+              </button>
               <input
                 id="jarvis-input"
                 value={input}
@@ -182,13 +300,24 @@ export function DraggableChat() {
                 disabled={busy}
                 className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-white/20 focus:outline-none focus:border-jcyan/50 focus:bg-jcyan/5 transition-all disabled:opacity-40"
               />
-              <button
-                type="submit"
-                disabled={busy || !input.trim()}
-                className="px-4 py-2 border border-jcyan/60 text-jcyan rounded-lg text-sm font-bold hover:bg-jcyan/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                ↑
-              </button>
+              {busy ? (
+                <button
+                  type="button"
+                  onClick={cancelStream}
+                  className="px-4 py-2 border border-jurgent/60 text-jurgent rounded-lg text-sm font-bold hover:bg-jurgent/10 transition-colors"
+                  title="Cancel stream"
+                >
+                  ■
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={!input.trim()}
+                  className="px-4 py-2 border border-jcyan/60 text-jcyan rounded-lg text-sm font-bold hover:bg-jcyan/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  ↑
+                </button>
+              )}
             </form>
           </>
         )}

@@ -151,6 +151,46 @@ export const DecisionsAPI = {
     }),
 };
 
+// ── Files ───────────────────────────────────────────────────────────────────
+
+export interface FileRow {
+  id: number;
+  filename: string;
+  file_type: string;          // image | pdf | csv | text | video | unknown
+  s3_key: string | null;
+  size_bytes: number;
+  processed: boolean;
+  has_extracted_text: boolean;
+  extracted_preview: string | null;
+  signed_url: string | null;
+  created_at: string | null;
+}
+
+export const FilesAPI = {
+  list: () => call<{ files: FileRow[] }>("/api/files"),
+  remove: (id: number) =>
+    call<{ ok: boolean }>(`/api/files/${id}`, { method: "DELETE" }),
+
+  // Upload uses multipart, not JSON — call separately
+  async upload(file: File): Promise<FileRow> {
+    const fd = new FormData();
+    fd.append("file", file);
+    const headers: HeadersInit = {};
+    const t = localStorage.getItem("jarvis_token");
+    if (t) (headers as Record<string, string>)["Authorization"] = `Bearer ${t}`;
+    const r = await fetch(`${BASE}/api/files/upload`, {
+      method: "POST",
+      body: fd,
+      headers,
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      throw new ApiError(r.status, j.detail || `Upload failed (${r.status})`);
+    }
+    return r.json();
+  },
+};
+
 // ── Intel briefs ────────────────────────────────────────────────────────────
 
 export interface IntelBrief {
