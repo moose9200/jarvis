@@ -16,7 +16,7 @@ from rate_limit import limiter
 
 router = APIRouter()
 
-SECRET_KEY = os.getenv("JWT_SECRET", "jarvis-jwt-2026")
+SECRET_KEY = os.environ["JWT_SECRET"]  # main.py enforces presence at boot
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 30
 
