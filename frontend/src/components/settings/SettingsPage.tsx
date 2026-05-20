@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ContextAPI, SettingsAPI } from "../../lib/api";
 import { useJarvisStore } from "../../store/jarvisStore";
@@ -486,10 +486,61 @@ function KeyRow({
 
 // ── Context tab ─────────────────────────────────────────────────────────────
 
+// Pre-defined starter templates per field. Each option is a one-liner the
+// user can apply with one click. {industry} is substituted with the user's
+// signup industry. Designed to be edited after applying — they're starting
+// points, not final copy.
+const CONTEXT_TEMPLATES = {
+  about_me: [
+    "Solo founder building a {industry} product. Technical background, wear all hats.",
+    "Founder of an early-stage {industry} startup (~5 people). Focused on shipping fast and finding product-market fit.",
+    "Operator at a growth-stage {industry} company. Lead a team of 8 across product + engineering.",
+    "Independent consultant in {industry}. Project-based work, multiple clients, mostly async.",
+    "VP of Engineering at a Series B {industry} company. Manage 4 team leads. Heavy on hiring + roadmap.",
+  ],
+  communication_style: [
+    "Direct. No fluff. Bullets when listing 3+ items. Skip pleasantries.",
+    "Structured: ## headers for complex answers, key takeaway at the top, evidence below.",
+    "Conversational and lightly witty. Avoid corporate-speak. Use concrete examples.",
+    "Concise. Lead with the answer. Reasoning only if asked for it.",
+    "Like a senior peer reviewer: blunt about what's wrong, specific about how to fix it.",
+  ],
+  priorities: [
+    "Customer retention, shipping the next major release, key engineering hire.",
+    "Fundraising prep (deck + data room), pipeline coverage, founding-team alignment.",
+    "Reducing churn, improving onboarding conversion, hiring a head of marketing.",
+    "Cash flow visibility, customer support quality, expanding into a second region.",
+    "Hitting Q3 revenue target, recovering from a recent outage, building exec team.",
+  ],
+  business_context: [
+    "Early-stage {industry} startup, pre-product-market-fit, bootstrapped, sub-$10k MRR.",
+    "D2C {industry} brand on Shopify. Mix of paid + organic. Subscription + one-off SKUs.",
+    "B2B SaaS in {industry}. Sales-led, mid-market focus. Series A, $1M+ ARR, 8-month CAC payback.",
+    "Growth-stage {industry} company, Series B, ~50 employees, retention-driven metrics.",
+    "Two-sided marketplace in {industry}. Liquidity is the bottleneck on the supply side.",
+  ],
+} as const;
+
+
 function ContextTab({
   context, setContext,
 }: { context: UserContextSnapshot | null; setContext: (c: UserContextSnapshot) => void }) {
   const addToast = useJarvisStore((s) => s.addToast);
+  const [industry, setIndustry] = useState<string>("");
+
+  // Pull the user's signup industry once so we can substitute {industry}
+  // placeholders inside templates. Lightweight call — runs at most once.
+  useEffect(() => {
+    const t = localStorage.getItem("jarvis_token");
+    if (!t) return;
+    fetch(`${import.meta.env.VITE_API_BASE || ""}/api/users/me`, {
+      headers: { Authorization: `Bearer ${t}` },
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((u) => u?.industry && setIndustry(u.industry))
+      .catch(() => {});
+  }, []);
+
   if (!context) return <Loading />;
 
   const save = async (patch: Partial<UserContextSnapshot>) => {
@@ -514,6 +565,8 @@ function ContextTab({
         value={context.about_me || ""}
         onSave={(v) => save({ about_me: v })}
         rows={3}
+        templates={[...CONTEXT_TEMPLATES.about_me]}
+        industry={industry}
       />
       <TextField
         label="Communication style"
@@ -521,6 +574,8 @@ function ContextTab({
         value={context.communication_style || ""}
         onSave={(v) => save({ communication_style: v })}
         rows={2}
+        templates={[...CONTEXT_TEMPLATES.communication_style]}
+        industry={industry}
       />
       <TextField
         label="Top priorities"
@@ -528,6 +583,8 @@ function ContextTab({
         value={context.priorities || ""}
         onSave={(v) => save({ priorities: v })}
         rows={2}
+        templates={[...CONTEXT_TEMPLATES.priorities]}
+        industry={industry}
       />
       <TextField
         label="Business context"
@@ -535,6 +592,8 @@ function ContextTab({
         value={context.business_context || ""}
         onSave={(v) => save({ business_context: v })}
         rows={3}
+        templates={[...CONTEXT_TEMPLATES.business_context]}
+        industry={industry}
       />
       <Section
         title="Team members"
@@ -682,13 +741,36 @@ function Section({ title, desc, children }: { title: string; desc?: string; chil
 }
 
 function TextField({
-  label, value, placeholder, onSave, rows = 2,
-}: { label: string; value: string; placeholder: string; onSave: (v: string) => void; rows?: number }) {
+  label, value, placeholder, onSave, rows = 2, templates, industry,
+}: {
+  label: string;
+  value: string;
+  placeholder: string;
+  onSave: (v: string) => void;
+  rows?: number;
+  templates?: string[];
+  industry?: string;
+}) {
   const [val, setVal] = useState(value);
   useEffect(() => setVal(value), [value]);
+
+  // Apply a template: substitute {industry} placeholder. Overwrite if field
+  // is empty, otherwise append on a new line so the user doesn't lose work.
+  const applyTemplate = (tpl: string) => {
+    const text = tpl.replace(/\{industry\}/g, industry || "your industry");
+    const next = val.trim() ? `${val.trim()}\n${text}` : text;
+    setVal(next);
+    onSave(next);
+  };
+
   return (
     <div>
-      <label className="block text-white/40 text-xs uppercase tracking-wider mb-1.5">{label}</label>
+      <div className="flex items-center justify-between mb-1.5">
+        <label className="block text-white/40 text-xs uppercase tracking-wider">{label}</label>
+        {templates && templates.length > 0 && (
+          <TemplateMenu options={templates} onPick={applyTemplate} />
+        )}
+      </div>
       <textarea
         value={val}
         rows={rows}
@@ -697,6 +779,49 @@ function TextField({
         placeholder={placeholder}
         className="w-full bg-white/5 border border-white/15 rounded px-3 py-2 text-white text-sm resize-y focus:outline-none focus:border-jcyan/60"
       />
+    </div>
+  );
+}
+
+
+function TemplateMenu({
+  options, onPick,
+}: { options: string[]; onPick: (text: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="text-[10px] uppercase tracking-wider text-jcyan/60 hover:text-jcyan border border-jcyan/20 hover:border-jcyan/40 rounded-full px-2 py-0.5 transition-colors"
+      >
+        ✨ Templates
+      </button>
+      {open && (
+        <div className="absolute top-full right-0 mt-1 w-80 max-h-[60vh] overflow-y-auto bg-[#0a0e1a]/95 backdrop-blur-md border border-jcyan/30 rounded-lg shadow-2xl z-50 scrollbar-thin">
+          {options.map((opt, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => { onPick(opt); setOpen(false); }}
+              className="w-full text-left px-3 py-2 text-xs text-white/70 hover:text-white hover:bg-jcyan/10 border-b border-white/5 last:border-0 transition-colors leading-relaxed"
+              title={opt}
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
