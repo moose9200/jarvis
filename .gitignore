@@ -1,18 +1,78 @@
-# Python
+# =============================================================================
+# JARVIS V2 — Git Ignore
+# =============================================================================
+
+# ── Secrets — NEVER commit ───────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+!.env.dev.example
+*.key
+*.pem
+*.crt
+backend/.env
+backend/.env.*
+!backend/.env.example
+!backend/.env.dev
+
+# ── Python ───────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
-venv/
-.env
-*.db
-
-# Node
-node_modules/
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+.eggs/
+build/
 dist/
-.env.local
-.env
+develop-eggs/
+.installed.cfg
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+venv/
+.venv/
+env/
+ENV/
 
-# Editor
+# ── Databases / data ─────────────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+backend/data/
+backups/
+
+# ── Node / frontend ──────────────────────────────────────────────────────────
+node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── Docker / runtime ─────────────────────────────────────────────────────────
+.docker/
+
+# ── Editors / OS ─────────────────────────────────────────────────────────────
 .vscode/
 .idea/
 .DS_Store
-# worktrees
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# ── Claude / agent worktrees ─────────────────────────────────────────────────
+.worktrees/
+.claude/local/
+
+# ── Misc ─────────────────────────────────────────────────────────────────────
+*.bak
+*.tmp
