@@ -8,6 +8,7 @@ import type {
   PanelKey,
   TaskItem,
   ToastItem,
+  ToolEvent,
   WakeState,
   ConnectorStatus,
 } from "../types";
@@ -63,6 +64,8 @@ interface JarvisState {
     text: string,
     callbacks: {
       onToken?: (delta: string) => void;
+      onToolStart?: (name: string) => void;
+      onToolEnd?: (name: string, ok: boolean) => void;
       onDone?: (usage: any) => void;
       onError?: (error: string) => void;
     },
@@ -263,6 +266,7 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
       const decoder = new TextDecoder();
       let buf = "";
       let assembled = "";
+      const tools: ToolEvent[] = [];
 
       while (true) {
         const { value, done } = await reader.read();
@@ -285,6 +289,19 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
             if (parsed.type === "token" && parsed.text) {
               assembled += parsed.text;
               callbacks.onToken?.(parsed.text);
+            } else if (parsed.type === "tool_start" && parsed.name) {
+              tools.push({ name: parsed.name, status: "running" });
+              callbacks.onToolStart?.(parsed.name);
+            } else if (parsed.type === "tool_end" && parsed.name) {
+              // Mark the most recent matching "running" entry. Multiple
+              // calls to the same tool in one turn are rare but possible.
+              for (let i = tools.length - 1; i >= 0; i--) {
+                if (tools[i].name === parsed.name && tools[i].status === "running") {
+                  tools[i] = { name: parsed.name, status: parsed.ok ? "ok" : "fail" };
+                  break;
+                }
+              }
+              callbacks.onToolEnd?.(parsed.name, !!parsed.ok);
             } else if (parsed.type === "done") {
               callbacks.onDone?.(parsed.usage || {});
             } else if (parsed.type === "error") {
@@ -297,8 +314,13 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
       }
 
       // Persist assistant turn to local chat history
-      if (assembled) {
-        get().appendChat({ role: "assistant", text: assembled, timestamp: Date.now() });
+      if (assembled || tools.length) {
+        get().appendChat({
+          role: "assistant",
+          text: assembled,
+          timestamp: Date.now(),
+          tools: tools.length ? tools : undefined,
+        });
       }
       set({ wakeState: "responding" });
       setTimeout(() => set({ wakeState: "idle" }), 800);

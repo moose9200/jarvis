@@ -41,10 +41,16 @@ export interface TaskItem {
   url?: string;
 }
 
+export interface ToolEvent {
+  name: string;
+  status: "running" | "ok" | "fail";
+}
+
 export interface ChatTurn {
   role: "user" | "assistant";
   text: string;
   timestamp: number;
+  tools?: ToolEvent[];
 }
 
 export interface ConnectorStatus {

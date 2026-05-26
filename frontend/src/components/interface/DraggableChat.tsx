@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { motion, useDragControls } from "framer-motion";
 import { FilesAPI, type FileRow } from "../../lib/api";
 import { useJarvisStore } from "../../store/jarvisStore";
+import type { ToolEvent } from "../../types";
 import { InlineChatControls } from "./InlineChatControls";
 
 const MIN_W = 320;
@@ -15,6 +16,7 @@ export function DraggableChat() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [streamingText, setStreamingText] = useState("");
+  const [streamingTools, setStreamingTools] = useState<ToolEvent[]>([]);
   const [lastUsage, setLastUsage] = useState<any>(null);
   const [attachments, setAttachments] = useState<FileRow[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -56,6 +58,7 @@ export function DraggableChat() {
     if (!input.trim() || busy) return;
     setBusy(true);
     setStreamingText("");
+    setStreamingTools([]);
     setLastUsage(null);
     const v = input;
     setInput("");
@@ -70,6 +73,19 @@ export function DraggableChat() {
         v,
         {
           onToken: (delta) => setStreamingText((s) => s + delta),
+          onToolStart: (name) =>
+            setStreamingTools((ts) => [...ts, { name, status: "running" }]),
+          onToolEnd: (name, ok) =>
+            setStreamingTools((ts) => {
+              const next = [...ts];
+              for (let i = next.length - 1; i >= 0; i--) {
+                if (next[i].name === name && next[i].status === "running") {
+                  next[i] = { name, status: ok ? "ok" : "fail" };
+                  break;
+                }
+              }
+              return next;
+            }),
           onDone:  (usage) => setLastUsage(usage),
           onError: (err)   => setStreamingText((s) => s + `\n\n[stream error: ${err}]`),
         },
@@ -79,6 +95,7 @@ export function DraggableChat() {
     } finally {
       abortRef.current = null;
       setStreamingText("");   // assistant message now in chat history
+      setStreamingTools([]);
       setAttachments([]);     // attachments consumed by this turn
       setBusy(false);
     }
@@ -208,14 +225,21 @@ export function DraggableChat() {
                       J
                     </div>
                   )}
-                  <div
-                    className={`max-w-[80%] px-3 py-2 rounded-xl text-sm leading-relaxed whitespace-pre-wrap break-words ${
-                      t.role === "user"
-                        ? "bg-jcyan/15 border border-jcyan/30 text-white rounded-tr-sm"
-                        : "bg-white/5 border border-white/10 text-white/90 rounded-tl-sm"
-                    }`}
-                  >
-                    {t.text}
+                  <div className="max-w-[80%] flex flex-col gap-1">
+                    {t.role === "assistant" && t.tools && t.tools.length > 0 && (
+                      <ToolPills tools={t.tools} />
+                    )}
+                    {(t.text || t.role === "user") && (
+                      <div
+                        className={`px-3 py-2 rounded-xl text-sm leading-relaxed whitespace-pre-wrap break-words ${
+                          t.role === "user"
+                            ? "bg-jcyan/15 border border-jcyan/30 text-white rounded-tr-sm"
+                            : "bg-white/5 border border-white/10 text-white/90 rounded-tl-sm"
+                        }`}
+                      >
+                        {t.text}
+                      </div>
+                    )}
                   </div>
                   {t.role === "user" && (
                     <div className="w-5 h-5 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white/60 text-[10px] shrink-0 mt-0.5">
@@ -229,9 +253,12 @@ export function DraggableChat() {
                   <div className="w-5 h-5 rounded-full bg-jcyan/20 border border-jcyan/40 flex items-center justify-center text-jcyan text-[10px] shrink-0 mt-0.5">
                     J
                   </div>
-                  <div className="max-w-[80%] px-3 py-2 rounded-xl rounded-tl-sm bg-white/5 border border-white/10 text-white/90 text-sm leading-relaxed whitespace-pre-wrap break-words">
-                    {streamingText || <ThinkingDots />}
-                    <span className="inline-block w-1.5 h-3 bg-jcyan/60 animate-pulse ml-0.5 align-middle" />
+                  <div className="max-w-[80%] flex flex-col gap-1">
+                    {streamingTools.length > 0 && <ToolPills tools={streamingTools} />}
+                    <div className="px-3 py-2 rounded-xl rounded-tl-sm bg-white/5 border border-white/10 text-white/90 text-sm leading-relaxed whitespace-pre-wrap break-words">
+                      {streamingText || <ThinkingDots />}
+                      <span className="inline-block w-1.5 h-3 bg-jcyan/60 animate-pulse ml-0.5 align-middle" />
+                    </div>
                   </div>
                 </div>
               )}
@@ -383,6 +410,58 @@ function ThinkingDots() {
           transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15 }}
         />
       ))}
+    </div>
+  );
+}
+
+const TOOL_LABELS: Record<string, string> = {
+  send_email: "send email",
+  get_priority_emails: "fetch emails",
+  get_calendar_events: "fetch calendar",
+  get_slack_messages: "fetch slack",
+  get_teams_messages: "fetch teams",
+  get_whatsapp_messages: "fetch whatsapp",
+  get_github_issues: "fetch github",
+  get_linear_issues: "fetch linear",
+  get_jira_issues: "fetch jira",
+  get_notion_pages: "fetch notion",
+  get_daily_brief: "daily brief",
+  push_to_github: "push to github",
+};
+
+function ToolPills({ tools }: { tools: ToolEvent[] }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {tools.map((t, i) => {
+        const label = TOOL_LABELS[t.name] || t.name.replace(/_/g, " ");
+        const style =
+          t.status === "running"
+            ? "bg-jcyan/10 border-jcyan/40 text-jcyan"
+            : t.status === "ok"
+            ? "bg-green-400/10 border-green-400/40 text-green-300"
+            : "bg-jurgent/10 border-jurgent/40 text-jurgent";
+        const icon =
+          t.status === "running" ? (
+            <motion.span
+              className="inline-block w-1.5 h-1.5 rounded-full bg-current"
+              animate={{ opacity: [0.3, 1, 0.3] }}
+              transition={{ duration: 1, repeat: Infinity }}
+            />
+          ) : t.status === "ok" ? (
+            <span className="text-[10px] leading-none">✓</span>
+          ) : (
+            <span className="text-[10px] leading-none">✕</span>
+          );
+        return (
+          <span
+            key={i}
+            className={`inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full border ${style}`}
+          >
+            {icon}
+            <span>{label}</span>
+          </span>
+        );
+      })}
     </div>
   );
 }
