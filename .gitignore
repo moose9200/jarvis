@@ -71,6 +71,7 @@ Thumbs.db
 
 # ── Claude / agent worktrees ─────────────────────────────────────────────────
 .worktrees/
+.claude/worktrees/
 .claude/local/
 
 # ── Misc ─────────────────────────────────────────────────────────────────────
