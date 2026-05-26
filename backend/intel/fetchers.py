@@ -119,6 +119,14 @@ def default_sources_for_industry(industry: str) -> dict[str, Any]:
         "marketing":    ["marketing", "advertising", "growthhacking"],
         "real estate":  ["RealEstate", "realestateinvesting", "Entrepreneur"],
         "health":       ["healthcare", "medicine", "wellness"],
+        # Jewellery / piercing / tattoo verticals — chatter + influencer
+        # noise + customer questions live here. Used by the Phase 1
+        # industry monitor.
+        "jewel":        ["Jewelry", "piercing", "Legitpiercing", "BodyJewelry"],
+        "pierc":        ["piercing", "Legitpiercing", "BodyJewelry", "StretchedEars"],
+        "tattoo":       ["tattoo", "TattooArtists", "TattooDesigns", "Stickandpoke"],
+        "body modification": ["bodymods", "piercing", "StretchedEars", "tattoo"],
+        "bodymod":      ["bodymods", "piercing", "StretchedEars", "tattoo"],
     }
     subs = base_subs
     for kw, subset in keyword_subs.items():

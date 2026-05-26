@@ -321,3 +321,48 @@ class IntelBriefRun(Base):
 
     started_at = Column(DateTime, default=datetime.utcnow)
     finished_at = Column(DateTime, nullable=True)
+
+
+class ProductRelease(Base):
+    """A product discovered on a watched competitor / supplier site.
+
+    Industry-specific monitor for jewellery / piercing / tattoo verticals
+    (and any other Shopify-style store the user wires up). One row per
+    (site_domain, external_product_id) — first seen during a daily fetch,
+    re-fetches are idempotent.
+
+    Watcher source: backend/intel/product_watcher.py
+    Task:          backend/tasks/product_watcher.py
+    Endpoint:      GET /api/product-releases
+    """
+    __tablename__ = "product_releases"
+    __table_args__ = (
+        UniqueConstraint("site_domain", "external_product_id", name="uq_product_release_site_pid"),
+    )
+
+    id = Column(Integer, primary_key=True)
+
+    # Multi-tenant: each watcher belongs to a user so different tenants
+    # can subscribe to different sites without cross-contamination.
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+
+    site_domain = Column(String, nullable=False, index=True)         # e.g. tishlyon.com
+    external_product_id = Column(String, nullable=False, index=True) # Shopify product id (str)
+    handle = Column(String, nullable=True)                           # shopify slug
+    title = Column(String, nullable=False)
+    vendor = Column(String, nullable=True)
+    product_type = Column(String, nullable=True)
+    tags = Column(JSON, nullable=True)                               # list[str]
+    price = Column(String, nullable=True)                            # cheapest variant, currency-naive
+    image_url = Column(String, nullable=True)
+    url = Column(String, nullable=False)                             # full product URL
+
+    # Shopify-reported timestamps. `published_at_remote` is the field we
+    # diff against to decide "new since last run".
+    created_at_remote = Column(DateTime, nullable=True)
+    published_at_remote = Column(DateTime, nullable=True)
+
+    # Local bookkeeping
+    first_seen_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    last_seen_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    surfaced_to_user = Column(Boolean, default=False, index=True)  # flips true after Decision row created

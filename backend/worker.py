@@ -32,8 +32,9 @@ celery_app = Celery(
     broker=REDIS_URL,
     backend=REDIS_URL,
     include=[
-        "tasks.intel",          # IntelBrief auto-runs
-        "tasks.decisions",      # Decision Inbox builder
+        "tasks.intel",            # IntelBrief auto-runs
+        "tasks.decisions",        # Decision Inbox builder
+        "tasks.product_watcher",  # Industry product-release watcher (Phase 1)
         # Add task modules here as new background jobs are built:
         # "tasks.email_ingest",
         # "tasks.shopify_sync",
@@ -67,6 +68,13 @@ celery_app.conf.beat_schedule = {
     "decisions-build-every-15-min": {
         "task": "decisions.build_for_all",
         "schedule": 900.0,   # 15 minutes
+    },
+    # Industry product-release watcher (Shopify storefronts). Runs once
+    # every 6 hours — products don't change often and the public JSON
+    # endpoints are unauthenticated, so we stay polite.
+    "product-watcher-every-6-hours": {
+        "task": "product_watcher.run_for_all",
+        "schedule": 21600.0,   # 6 hours
     },
 }
 
