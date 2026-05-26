@@ -114,7 +114,16 @@ async def fetch_shopify_products(
     Shopify ignores filters but obeys ?limit + ?page. If a page returns
     fewer than limit, we know we've hit the end and stop early.
     """
-    base = f"https://{domain.lstrip('https://').lstrip('http://').rstrip('/')}/products.json"
+    # Normalise: accept "tishlyon.com", "https://tishlyon.com", or
+    # "https://tishlyon.com/". `str.lstrip` strips CHARS, not a prefix,
+    # so e.g. "tishlyon.com".lstrip("https://") → "ishlyon.com" — use
+    # removeprefix instead.
+    host = domain.strip()
+    for pre in ("https://", "http://"):
+        if host.startswith(pre):
+            host = host[len(pre):]
+    host = host.rstrip("/")
+    base = f"https://{host}/products.json"
     out: list[NormalisedProduct] = []
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT, follow_redirects=True) as c:
