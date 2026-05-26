@@ -102,6 +102,30 @@ When resuming a session, read this file first. Pick from "Work Queue (Priority O
 - Blocker: Stripe account + price IDs (USER_TASKS #8). Identity verification takes 1–3 days.
 - Once unlocked: ~3 hours.
 
+### Step 28 — MS Dynamics 365 connector (sales + purchase)
+- New `backend/connectors/ms_dynamics.py` (OAuth via Azure AD), AI tools `get_dynamics_sales`, `get_dynamics_purchase_orders`, `get_dynamics_accounts`, optional `create_quote`. Panel + canned prompts.
+- Blocker: Azure AD app registration with Dynamics scope + tenant_id + client_id + client_secret. Microsoft creds may share infra with existing outlook_mail / outlook_calendar / teams (same `microsoft` vendor group in `oauth_refresh.py`) but Dynamics scope must be added to the consent screen.
+- Once unlocked: ~4 hours (auth flow + 4 tools + UI).
+
+### Step 29 — Freshcaller (CRM call updates)
+- New `backend/connectors/freshcaller.py` (API key auth, like planned Freshdesk). AI tool `get_recent_calls`. Surfaces recent calls + missed calls into Decision Inbox.
+- Blocker: FRESHCALLER_SUBDOMAIN + FRESHCALLER_API_KEY (Freshworks free trial, ~5 min). Pair with Freshdesk USER_TASKS #7 if user buys the same suite.
+- Once unlocked: ~1.5 hours.
+
+### Step 30 — Competitor Ads watcher (Meta Ads Library)
+- New `backend/intel/ads_watcher.py` using the Facebook Ad Library API (covers Instagram + Facebook simultaneously — Meta merged the libraries). Daily fetch of `latest ads` per competitor page id, diff against previous run, surface new creatives as Decision rows.
+- Phase 2 prerequisite: an auto-discovery pass over Reddit chatter + linked-out vendor lists on wholesalebodyjewellery / tishlyon proposes a competitor list for the user to approve.
+- Blocker: Meta developer app + system user access token with `ads_archive` scope. Free, instant approval — see https://www.facebook.com/ads/library/api/ docs.
+- Once unlocked: ~3 hours (per-page id resolver + fetcher + diff + UI).
+
+### Step 31 — Celebrity / influencer mention monitor
+- Wire celebrity-mention sources into the existing Intel Brief synth pipeline:
+  - Reddit (already wired — keyword filter on piercing/jewellery subs)
+  - Google News RSS (free, no key): `https://news.google.com/rss/search?q=<query>`
+  - Public RSS feeds of jewellery/tattoo trade press (TPS Magazine, Pain Magazine, Inked Mag, BMEzine archive)
+- Hard NO on X / Twitter API (paid). Instagram has no clean search API outside Ads Library.
+- Effort: ~2 hours; no creds required.
+
 ### Step 26 — Unicorn features (Phase 2, post-launch)
 - 26.1 Explicit persistent memories ("remember that X")
 - 26.2 Relationship graph (enhanced `SenderProfile`)
@@ -191,6 +215,8 @@ Pick the top item; ship; move to "Done"; commit.
 
 ## Done log (move items here as they ship)
 
+- 2026-05-26 5f08ec5: Phase 1 industry product-release watcher (Shopify storefront JSON, daily Celery beat, ProductRelease model + alembic 0005, /api/product-releases endpoints, aggregated Decision rows, jewellery/piercing/tattoo subreddit defaults). Fix: lstrip→removeprefix in domain normaliser.
+- 2026-05-26 377a7e6: streaming tool-use end-to-end (backend AIChunk(type=tool_call), JarvisAI.stream tool loop) + frontend tool_start/tool_end pills.
 - 2026-05-20 7fdf358: queue 12 — mock-oauth FastAPI server (port 9100, single-use codes, canned API data)
 - 2026-05-20 78eb2b0: queue 10 — build_decision_inbox Celery task + 15-min beat schedule
 - 2026-05-20 6cfce57: queue 9 — Step 16/17 cleanup (JWT_SECRET hard requirement, VITE_API_BASE env)
