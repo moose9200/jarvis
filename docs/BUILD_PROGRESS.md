@@ -121,6 +121,7 @@ After each full step: git commit with message `step X: description`.
 - [ ] 5.3 Frontend StreamingChatBubble component (deferred to frontend pass)
 - [ ] 5.4 Cancel button mid-stream (deferred to frontend pass — AbortController)
 - [x] 5.5 Token usage emitted in the done event (provider, model, in, out, cache, cost_usd)
+- [x] 5.6 Streaming tool-use loop (2026-05-26). Anthropic + OpenAI providers emit AIChunk(type="tool_call"); JarvisAI.stream wraps streaming in MAX_TOOL_TURNS loop; new SSE events tool_start/tool_end. Verified: real Gmail send via /api/chat/stream end-to-end.
 
 **Commit:** `git commit -m "step 5: streaming SSE chat"`
 
