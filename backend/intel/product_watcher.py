@@ -258,32 +258,55 @@ async def run_watch_cycle(
         if not unsurfaced:
             continue
 
-        # One Decision row per site per cycle. Avoid pile-up.
+        # Upsert ONE pending Decision row per (user, site). Static
+        # source_id (no timestamp) lets us dedupe — pattern mirrors
+        # connectors.oauth_refresh._surface_reconnect.
         sample = ", ".join(f"{r.title}" for r in unsurfaced[:3])
         more = f" (+{len(unsurfaced) - 3} more)" if len(unsurfaced) > 3 else ""
-        db.add(
-            Decision(
-                user_id=user_id,
-                source="product_release",
-                source_id=f"product_release:{domain}:{int(datetime.utcnow().timestamp())}",
-                title=f"{len(unsurfaced)} new product{'s' if len(unsurfaced) != 1 else ''} on {domain}",
-                ai_suggestion=(
-                    f"New on {domain}: {sample}{more}. "
-                    f"Open the product-releases panel to review and decide if any belong on your line."
-                ),
-                status="pending",
-                created_at=datetime.utcnow(),
-                context_json={
-                    "site_domain": domain,
-                    "count": len(unsurfaced),
-                    "ids": [r.id for r in unsurfaced],
-                    "sample_titles": [r.title for r in unsurfaced[:5]],
-                },
-            )
+        src_id = f"product_release:{domain}"
+        title = f"{len(unsurfaced)} new product{'s' if len(unsurfaced) != 1 else ''} on {domain}"
+        suggestion = (
+            f"New on {domain}: {sample}{more}. "
+            f"Open the product-releases panel to review and decide if any belong on your line."
         )
+        ctx = {
+            "site_domain": domain,
+            "count": len(unsurfaced),
+            "ids": [r.id for r in unsurfaced],
+            "sample_titles": [r.title for r in unsurfaced[:5]],
+        }
+        now = datetime.utcnow()
+
+        existing = (
+            db.query(Decision)
+            .filter_by(user_id=user_id, source="product_release", source_id=src_id)
+            .filter(Decision.status.in_(["pending", "snoozed"]))
+            .first()
+        )
+        if existing:
+            # Refresh in place so the inbox sorts it to top and the
+            # title reflects the current backlog count.
+            existing.title = title
+            existing.ai_suggestion = suggestion
+            existing.context_json = ctx
+            existing.created_at = now
+            existing.status = "pending"  # un-snooze if user had snoozed it
+        else:
+            db.add(
+                Decision(
+                    user_id=user_id,
+                    source="product_release",
+                    source_id=src_id,
+                    title=title,
+                    ai_suggestion=suggestion,
+                    status="pending",
+                    created_at=now,
+                    context_json=ctx,
+                )
+            )
+            decisions_created += 1
         for r in unsurfaced:
             r.surfaced_to_user = True
-        decisions_created += 1
     db.commit()
 
     return {

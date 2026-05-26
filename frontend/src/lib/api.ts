@@ -242,6 +242,58 @@ export const IntelAPI = {
     call<{ runs: IntelBriefRun[] }>(`/api/intel-briefs/${id}/runs?limit=${limit}`),
 };
 
+// ── Product Releases (industry watcher) ──────────────────────────────────────
+
+export interface ProductRelease {
+  id: number;
+  site_domain: string;
+  external_product_id: string;
+  handle: string | null;
+  title: string;
+  vendor: string | null;
+  product_type: string | null;
+  tags: string[];
+  price: string | null;
+  image_url: string | null;
+  url: string;
+  created_at_remote: string | null;
+  published_at_remote: string | null;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
+}
+
+export interface ProductReleaseSite {
+  domain: string;
+  count: number;
+}
+
+export interface ProductReleaseRefreshResult {
+  sites: Array<{ site: string; fetched: number; new: number; updated: number }>;
+  decisions_created: number;
+  ran_at: string;
+}
+
+export const ProductReleasesAPI = {
+  list: (params?: { site?: string; since_hours?: number; limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.site) q.set("site", params.site);
+    if (params?.since_hours != null) q.set("since_hours", String(params.since_hours));
+    if (params?.limit != null) q.set("limit", String(params.limit));
+    if (params?.offset != null) q.set("offset", String(params.offset));
+    const qs = q.toString();
+    return call<{ total: number; limit: number; offset: number; items: ProductRelease[] }>(
+      `/api/product-releases${qs ? "?" + qs : ""}`
+    );
+  },
+  sites: () =>
+    call<{ sites: ProductReleaseSite[]; defaults: string[] }>("/api/product-releases/sites"),
+  refresh: (sites?: string[]) =>
+    call<ProductReleaseRefreshResult>("/api/product-releases/refresh", {
+      method: "POST",
+      body: JSON.stringify(sites ? { sites } : {}),
+    }),
+};
+
 // ── Chat meta ───────────────────────────────────────────────────────────────
 
 export const ChatMetaAPI = {

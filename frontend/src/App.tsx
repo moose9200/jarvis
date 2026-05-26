@@ -16,6 +16,7 @@ import { SettingsPage } from "./components/settings/SettingsPage";
 import { TokenMonitor } from "./components/settings/TokenMonitor";
 import { DecisionInbox } from "./components/founder/DecisionInbox";
 import { IntelBriefsPanel } from "./components/intel/IntelBriefsPanel";
+import { ProductReleasesPanel } from "./components/intel/ProductReleasesPanel";
 import { useJarvisStore } from "./store/jarvisStore";
 import { useWakeWord } from "./hooks/useWakeWord";
 import { useVoice } from "./hooks/useVoice";
@@ -54,6 +55,7 @@ export default function App() {
   const [showTokens, setShowTokens] = useState(false);
   const [showDecisions, setShowDecisions] = useState(false);
   const [showIntel, setShowIntel] = useState(false);
+  const [showProductReleases, setShowProductReleases] = useState(false);
 
   // All hooks before conditional return
   const validateSession = useJarvisStore((s) => s.validateSession);
@@ -165,6 +167,13 @@ export default function App() {
           🌐
         </button>
         <button
+          onClick={() => setShowProductReleases(true)}
+          title="Product Releases — watched competitor / supplier sites"
+          className="px-2.5 py-1.5 rounded-lg border border-jcyan/30 bg-jcyan/5 text-jcyan text-xs font-bold uppercase tracking-widest hover:bg-jcyan/15 transition-colors"
+        >
+          🛍
+        </button>
+        <button
           onClick={() => setShowDecisions(true)}
           title="Decision inbox"
           className="px-2.5 py-1.5 rounded-lg border border-jcyan/30 bg-jcyan/5 text-jcyan text-xs font-bold uppercase tracking-widest hover:bg-jcyan/15 transition-colors"
@@ -216,6 +225,7 @@ export default function App() {
       <TokenMonitor open={showTokens} onClose={() => setShowTokens(false)} />
       <DecisionInbox open={showDecisions} onClose={() => setShowDecisions(false)} />
       <IntelBriefsPanel open={showIntel} onClose={() => setShowIntel(false)} />
+      <ProductReleasesPanel open={showProductReleases} onClose={() => setShowProductReleases(false)} />
 
       {/* ── Toast notifications ──────────────────────────────────────────────── */}
       <ToastStack />

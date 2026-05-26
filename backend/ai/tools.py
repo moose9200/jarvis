@@ -117,6 +117,36 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
         },
     },
     {
+        "name": "get_product_releases",
+        "description": (
+            "Look up product releases discovered by the industry watcher "
+            "(Shopify storefronts like wholesalebodyjewellery.com and "
+            "tishlyon.com). Use for questions such as 'what new piercing "
+            "products dropped this week', 'show me competitor product "
+            "launches', or 'any new gold studs on tishlyon'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "site": {
+                    "type": "string",
+                    "description": "Filter to a single watched site domain, e.g. 'tishlyon.com'. Optional.",
+                },
+                "since_hours": {
+                    "type": "integer",
+                    "description": "Only products first seen in the last N hours. Default 168 (one week).",
+                    "default": 168,
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max items to return. Default 20, hard cap 50.",
+                    "default": 20,
+                },
+            },
+            "required": [],
+        },
+    },
+    {
         "name": "send_email",
         "description": "Send an email via Gmail (falls back to Outlook if Gmail not connected).",
         "input_schema": {
@@ -219,6 +249,38 @@ async def dispatch(name: str, inputs: Dict[str, Any], db: Session, user_id: int 
             "priority_emails": priority_emails,
             "tasks": linear_issues + jira_issues,
         }
+
+    elif name == "get_product_releases":
+        # Industry product-release lookup. Pure SQLAlchemy — no
+        # connectors involved. db + user_id from dispatch() params.
+        from datetime import datetime, timedelta
+        from models import ProductRelease
+
+        if user_id is None:
+            return []
+        site = inputs.get("site")
+        since_hours = int(inputs.get("since_hours", 168))
+        limit = max(1, min(int(inputs.get("limit", 20)), 50))
+
+        q = db.query(ProductRelease).filter(ProductRelease.user_id == user_id)
+        if site:
+            q = q.filter(ProductRelease.site_domain == site)
+        cutoff = datetime.utcnow() - timedelta(hours=since_hours)
+        q = q.filter(ProductRelease.first_seen_at >= cutoff)
+        rows = q.order_by(ProductRelease.first_seen_at.desc()).limit(limit).all()
+
+        return [
+            {
+                "title": r.title,
+                "site": r.site_domain,
+                "vendor": r.vendor,
+                "product_type": r.product_type,
+                "price": r.price,
+                "url": r.url,
+                "first_seen": r.first_seen_at.isoformat() if r.first_seen_at else None,
+            }
+            for r in rows
+        ]
 
     elif name == "send_email":
         to = inputs.get("to", "")
