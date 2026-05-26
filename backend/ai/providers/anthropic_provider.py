@@ -127,6 +127,15 @@ class AnthropicProvider(AIProvider):
             async for text in stream.text_stream:
                 yield AIChunk(type="token", text=text)
             final = await stream.get_final_message()
+
+            # Emit tool_use blocks (if any) so the orchestrator can dispatch.
+            tool_calls: list[AIToolCall] = []
+            for block in final.content:
+                if getattr(block, "type", "") == "tool_use":
+                    tc = AIToolCall(id=block.id, name=block.name, input=block.input or {})
+                    tool_calls.append(tc)
+                    yield AIChunk(type="tool_call", tool_call=tc)
+
             yield AIChunk(
                 type="done",
                 usage={
@@ -134,5 +143,14 @@ class AnthropicProvider(AIProvider):
                     "output": final.usage.output_tokens,
                     "cache_read": getattr(final.usage, "cache_read_input_tokens", 0) or 0,
                     "cache_write": getattr(final.usage, "cache_creation_input_tokens", 0) or 0,
+                    "stop_reason": final.stop_reason or "",
+                    # Replay payload: orchestrator needs the assistant turn
+                    # (text + tool_use blocks) verbatim before tool_result turns.
+                    "_assistant_blocks": [
+                        {"type": "text", "text": b.text} if getattr(b, "type", "") == "text"
+                        else {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input or {}}
+                        for b in final.content
+                        if getattr(b, "type", "") in ("text", "tool_use")
+                    ],
                 },
             )

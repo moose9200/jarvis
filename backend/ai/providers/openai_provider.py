@@ -152,15 +152,76 @@ class OpenAICompatibleProvider(AIProvider):
 
         stream = await self.client.chat.completions.create(**kwargs)
         total_in = total_out = 0
+        finish_reason = ""
+        # OpenAI streams tool_calls as fragmented deltas keyed by `index`.
+        # Each delta may contribute partial name and/or partial arguments JSON.
+        tc_acc: dict[int, dict] = {}
+        text_buf: list[str] = []
+
         async for chunk in stream:
             if chunk.choices:
-                delta = chunk.choices[0].delta
-                if delta and delta.content:
-                    yield AIChunk(type="token", text=delta.content)
+                ch0 = chunk.choices[0]
+                delta = ch0.delta
+                if delta:
+                    if delta.content:
+                        text_buf.append(delta.content)
+                        yield AIChunk(type="token", text=delta.content)
+                    if getattr(delta, "tool_calls", None):
+                        for tc in delta.tool_calls:
+                            idx = tc.index
+                            slot = tc_acc.setdefault(idx, {"id": "", "name": "", "args": ""})
+                            if tc.id:
+                                slot["id"] = tc.id
+                            if tc.function:
+                                if tc.function.name:
+                                    slot["name"] += tc.function.name
+                                if tc.function.arguments:
+                                    slot["args"] += tc.function.arguments
+                if ch0.finish_reason:
+                    finish_reason = ch0.finish_reason
             if chunk.usage:
                 total_in = chunk.usage.prompt_tokens or 0
                 total_out = chunk.usage.completion_tokens or 0
+
+        # Emit accumulated tool_calls (if any).
+        tool_calls: list[AIToolCall] = []
+        for idx in sorted(tc_acc.keys()):
+            slot = tc_acc[idx]
+            if not slot["name"]:
+                continue
+            try:
+                parsed = json.loads(slot["args"] or "{}")
+            except json.JSONDecodeError:
+                parsed = {}
+            tc = AIToolCall(id=slot["id"] or f"call_{idx}", name=slot["name"], input=parsed)
+            tool_calls.append(tc)
+            yield AIChunk(type="tool_call", tool_call=tc)
+
+        # Build replay payload for the orchestrator. OpenAI wants the assistant
+        # message to include the tool_calls structure; we surface it the same
+        # way Anthropic does and let JarvisAI normalize.
+        assistant_msg = {
+            "role": "assistant",
+            "content": "".join(text_buf) or None,
+        }
+        if tool_calls:
+            assistant_msg["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {"name": tc.name, "arguments": json.dumps(tc.input)},
+                }
+                for tc in tool_calls
+            ]
+
         yield AIChunk(
             type="done",
-            usage={"input": total_in, "output": total_out, "cache_read": 0, "cache_write": 0},
+            usage={
+                "input": total_in,
+                "output": total_out,
+                "cache_read": 0,
+                "cache_write": 0,
+                "stop_reason": finish_reason,
+                "_assistant_message": assistant_msg,
+            },
         )

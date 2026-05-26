@@ -177,15 +177,20 @@ class JarvisAI:
         return {"text": fallback, "usage": self._format_usage(agg)}
 
     async def stream(self, user_message: str, file_ids: Optional[list[int]] = None) -> AsyncIterator[dict]:
-        """Streaming variant of respond(). Yields plain dicts:
-            {"type": "token", "text": "..."}     — per-token delta
-            {"type": "done",  "usage": {...}}    — final usage + cost
-            {"type": "error", "text": "..."}     — on failure
+        """Streaming variant of respond() with full tool-use support.
 
-        Tool calls are NOT supported in streaming mode (yet) — the SSE path
-        is for fast text answers. Callers needing tools should use respond().
-        File attachments ARE supported: file_ids resolve into multimodal
-        content the same way respond() does.
+        Event types yielded to the SSE client:
+            {"type": "token", "text": "..."}            — per-token delta
+            {"type": "tool_start", "name": "..."}        — model invoked a tool
+            {"type": "tool_end", "name": "...", "ok": bool}
+                                                         — dispatch completed
+            {"type": "done",  "usage": {...}}            — final usage + cost
+            {"type": "error", "text": "..."}             — on failure
+
+        Tool loop: when the model finishes a turn with stop_reason=tool_use,
+        we dispatch every tool synchronously, append the assistant turn +
+        tool_result turn to messages, then re-stream the next turn. Caps at
+        MAX_TOOL_TURNS to prevent runaway loops.
         """
         memory_content = self._memory_text(user_message, file_ids or [])
         self.memory.append("user", memory_content)
@@ -201,70 +206,134 @@ class JarvisAI:
             else:
                 messages.append(AIMessage(role="user", content=multimodal))
 
-        full_text_parts: list[str] = []
-        final_usage: dict | None = None
+        agg = {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_tokens": 0,
+            "cache_write_tokens": 0,
+            "thinking_tokens": 0,
+            "cost_usd": 0.0,
+        }
+        final_text_parts: list[str] = []
 
         try:
-            async for chunk in self.provider.stream(
-                messages=messages,
-                system=system_text,
-                tools=None,
-                model=self.model,
-                max_tokens=self.max_tokens,
-                thinking_budget=self.thinking_budget,
-            ):
-                if chunk.type == "token" and chunk.text:
-                    full_text_parts.append(chunk.text)
-                    yield {"type": "token", "text": chunk.text}
-                elif chunk.type == "done":
-                    final_usage = chunk.usage or {}
+            for _turn in range(MAX_TOOL_TURNS):
+                text_parts: list[str] = []
+                pending_calls: list = []
+                turn_usage: dict = {}
+
+                async for chunk in self.provider.stream(
+                    messages=messages,
+                    system=system_text,
+                    tools=self.tools,
+                    model=self.model,
+                    max_tokens=self.max_tokens,
+                    thinking_budget=self.thinking_budget,
+                ):
+                    if chunk.type == "token" and chunk.text:
+                        text_parts.append(chunk.text)
+                        yield {"type": "token", "text": chunk.text}
+                    elif chunk.type == "tool_call" and chunk.tool_call:
+                        pending_calls.append(chunk.tool_call)
+                        yield {"type": "tool_start", "name": chunk.tool_call.name}
+                    elif chunk.type == "done":
+                        turn_usage = chunk.usage or {}
+
+                # Accumulate usage for this turn
+                agg["input_tokens"] += turn_usage.get("input", 0)
+                agg["output_tokens"] += turn_usage.get("output", 0)
+                agg["cache_read_tokens"] += turn_usage.get("cache_read", 0)
+                agg["cache_write_tokens"] += turn_usage.get("cache_write", 0)
+                agg["cost_usd"] += estimate_cost(
+                    provider=self.provider_name,
+                    tier=self.tier if self.tier in TIER_MODELS else DEFAULT_TIER,
+                    input_tokens=turn_usage.get("input", 0),
+                    output_tokens=turn_usage.get("output", 0),
+                )
+
+                # No tool calls? This was the final turn.
+                if not pending_calls:
+                    final_text_parts = text_parts
+                    break
+
+                # Replay assistant turn with text + tool_use blocks (Anthropic
+                # shape; OpenAI provider unflattens via _flatten_content).
+                assistant_blocks: list[dict] = []
+                if text_parts:
+                    assistant_blocks.append({"type": "text", "text": "".join(text_parts)})
+                for tc in pending_calls:
+                    assistant_blocks.append(
+                        {"type": "tool_use", "id": tc.id, "name": tc.name, "input": tc.input}
+                    )
+                messages.append(AIMessage(role="assistant", content=assistant_blocks))
+
+                # Dispatch each tool, build tool_result blocks
+                tool_result_blocks: list[dict] = []
+                for tc in pending_calls:
+                    try:
+                        result = await dispatch(tc.name, tc.input, self.db, self.user_id)
+                        ok = not (isinstance(result, dict) and result.get("error"))
+                    except Exception:
+                        logger.exception("tool dispatch failed: %s", tc.name)
+                        result = {"error": "tool dispatch failed"}
+                        ok = False
+                    yield {"type": "tool_end", "name": tc.name, "ok": ok}
+                    tool_result_blocks.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tc.id,
+                            "content": str(result)[:8000],
+                        }
+                    )
+                messages.append(AIMessage(role="user", content=tool_result_blocks))
+                # Loop and re-stream the model's reaction to the tool results.
+            else:
+                # for-else: loop exhausted without break — hit MAX_TOOL_TURNS
+                yield {
+                    "type": "error",
+                    "text": "Hit tool-use limit. Narrow the request and try again.",
+                }
+                return
         except Exception:
             logger.exception("stream error")
             yield {"type": "error", "text": "Stream failed. Try again."}
             return
 
-        text = "".join(full_text_parts) or "Boss, no response generated."
+        text = "".join(final_text_parts) or "Boss, no response generated."
         self.memory.append("assistant", text)
 
-        if final_usage and self.user_id is not None:
+        # Persist aggregated usage + emit done.
+        if self.user_id is not None:
             try:
-                cost = estimate_cost(
-                    provider=self.provider_name,
-                    tier=self.tier if self.tier in TIER_MODELS else DEFAULT_TIER,
-                    input_tokens=final_usage.get("input", 0),
-                    output_tokens=final_usage.get("output", 0),
-                )
                 row = TokenUsage(
                     user_id=self.user_id,
                     date=_date.today().isoformat(),
                     provider=self.provider_name,
                     model=self.model,
-                    input_tokens=final_usage.get("input", 0),
-                    output_tokens=final_usage.get("output", 0),
-                    cache_read_tokens=final_usage.get("cache_read", 0),
-                    cache_write_tokens=final_usage.get("cache_write", 0),
-                    cost_usd=cost,
+                    input_tokens=agg["input_tokens"],
+                    output_tokens=agg["output_tokens"],
+                    cache_read_tokens=agg["cache_read_tokens"],
+                    cache_write_tokens=agg["cache_write_tokens"],
+                    cost_usd=agg["cost_usd"],
                 )
                 self.db.add(row)
                 self.db.commit()
-                yield {
-                    "type": "done",
-                    "usage": {
-                        "provider": self.provider_name,
-                        "model": self.model,
-                        "input": final_usage.get("input", 0),
-                        "output": final_usage.get("output", 0),
-                        "cache_read": final_usage.get("cache_read", 0),
-                        "cache_write": final_usage.get("cache_write", 0),
-                        "cost_usd": round(cost, 6),
-                    },
-                }
             except Exception:
                 logger.exception("failed to persist stream usage")
                 self.db.rollback()
-                yield {"type": "done", "usage": final_usage or {}}
-        else:
-            yield {"type": "done", "usage": final_usage or {}}
+
+        yield {
+            "type": "done",
+            "usage": {
+                "provider": self.provider_name,
+                "model": self.model,
+                "input": agg["input_tokens"],
+                "output": agg["output_tokens"],
+                "cache_read": agg["cache_read_tokens"],
+                "cache_write": agg["cache_write_tokens"],
+                "cost_usd": round(agg["cost_usd"], 6),
+            },
+        }
 
     # ── Internals ───────────────────────────────────────────────────────
 
