@@ -242,6 +242,9 @@ export function DraggableChat() {
                     {t.role === "assistant" && t.tools && t.tools.length > 0 && (
                       <ToolPills tools={t.tools} />
                     )}
+                    {t.role === "assistant" && t.corrections && t.corrections.length > 0 && (
+                      <GuardrailBanner corrections={t.corrections} />
+                    )}
                     {(t.text || t.role === "user") && (
                       <div
                         className={`px-3 py-2 rounded-xl text-sm leading-relaxed whitespace-pre-wrap break-words ${
@@ -441,6 +444,45 @@ const TOOL_LABELS: Record<string, string> = {
   get_daily_brief: "daily brief",
   push_to_github: "push to github",
 };
+
+/**
+ * Persistent inline banner rendered when the backend hallucination
+ * guardrail flagged an action-claim phrase that wasn't backed by a
+ * matching tool dispatch. Sits between the ToolPills row and the text
+ * bubble so the catch is always visible — including after a page reload
+ * (since corrections are persisted on the ChatTurn).
+ */
+function GuardrailBanner({
+  corrections,
+}: {
+  corrections: Array<{ phrase: string; required_tools: string[] }>;
+}) {
+  return (
+    <div className="rounded-lg border border-red-400/50 bg-red-400/10 px-3 py-2 text-xs text-red-300 leading-snug">
+      <div className="flex items-start gap-1.5">
+        <span aria-hidden className="text-red-400 leading-none">⚠</span>
+        <div className="flex-1 space-y-1">
+          <div className="font-semibold uppercase tracking-wide text-[10px] text-red-200">
+            Guardrail caught a false action claim
+          </div>
+          {corrections.map((c, i) => (
+            <div key={i} className="text-red-300/90">
+              <span className="italic">"{c.phrase.slice(0, 120)}"</span>
+              {c.required_tools.length > 0 && (
+                <span className="block text-red-300/70 text-[10px]">
+                  required tool: {c.required_tools.join(", ")}
+                </span>
+              )}
+            </div>
+          ))}
+          <div className="text-red-200/80 text-[10px] italic">
+            Action was NOT executed.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ToolPills({ tools }: { tools: ToolEvent[] }) {
   return (

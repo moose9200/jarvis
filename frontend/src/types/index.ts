@@ -51,6 +51,13 @@ export interface ChatTurn {
   text: string;
   timestamp: number;
   tools?: ToolEvent[];
+  /**
+   * Hallucination-guardrail flags surfaced by the backend `correction` SSE
+   * event. When present, the chat bubble renders a persistent red banner
+   * explaining which action claim was caught + which tool should have
+   * been invoked. Persisted on the turn so the catch survives reloads.
+   */
+  corrections?: Array<{ phrase: string; required_tools: string[] }>;
 }
 
 export interface ConnectorStatus {

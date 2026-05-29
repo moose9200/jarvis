@@ -268,6 +268,10 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
       let buf = "";
       let assembled = "";
       const tools: ToolEvent[] = [];
+      // Backend guardrail violations captured in this turn. Persisted on
+      // the ChatTurn so a persistent red banner survives across reloads,
+      // not just the live toast.
+      const corrections: Array<{ phrase: string; required_tools: string[] }> = [];
 
       while (true) {
         const { value, done } = await reader.read();
@@ -307,8 +311,22 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
               // Server-side guardrail caught the model claiming an action
               // it never invoked the tool for. Replace the streamed-in
               // (lying) text with the corrected, prefixed version so the
-              // user sees the honesty correction instead of the lie.
+              // user sees the honesty correction instead of the lie, and
+              // capture the structured violations so the chat bubble can
+              // render a persistent red banner.
               assembled = parsed.text;
+              if (Array.isArray(parsed.violations)) {
+                for (const v of parsed.violations) {
+                  if (v && typeof v.phrase === "string") {
+                    corrections.push({
+                      phrase: v.phrase,
+                      required_tools: Array.isArray(v.required_tools)
+                        ? v.required_tools
+                        : [],
+                    });
+                  }
+                }
+              }
               callbacks.onCorrection?.(parsed.text, parsed.violations || []);
             } else if (parsed.type === "done") {
               callbacks.onDone?.(parsed.usage || {});
@@ -321,13 +339,15 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
         }
       }
 
-      // Persist assistant turn to local chat history
+      // Persist assistant turn to local chat history. Include any
+      // guardrail violations so the inline banner persists across reloads.
       if (assembled || tools.length) {
         get().appendChat({
           role: "assistant",
           text: assembled,
           timestamp: Date.now(),
           tools: tools.length ? tools : undefined,
+          corrections: corrections.length ? corrections : undefined,
         });
       }
       set({ wakeState: "responding" });
