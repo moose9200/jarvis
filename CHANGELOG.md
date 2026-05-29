@@ -38,6 +38,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 - Step 24: GitHub Actions CI (Postgres + Redis services, pytest, frontend
   type-check + build, Docker image smoke build), .pre-commit-config.yaml
   (ruff, gitleaks, trailing whitespace), CHANGELOG.md.
+- Sentry SDK scaffolded backend (FastAPI + SQLAlchemy + Celery integrations) and frontend (React). No-op until SENTRY_DSN_BACKEND / VITE_SENTRY_DSN are set in env.
 
 ### Changed
 - backend/ai/claude_client.py REMOVED; logic moved to backend/ai/jarvis_ai.py.

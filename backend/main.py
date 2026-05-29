@@ -9,6 +9,22 @@ for _required in ("JWT_SECRET", "SESSION_SECRET", "TOKEN_ENCRYPTION_KEY"):
         print(f"FATAL: {_required} env var not set", file=sys.stderr)
         sys.exit(1)
 
+_SENTRY_DSN_BACKEND = os.getenv("SENTRY_DSN_BACKEND")
+if _SENTRY_DSN_BACKEND:
+    import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+    from sentry_sdk.integrations.starlette import StarletteIntegration
+    from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+    sentry_sdk.init(
+        dsn=_SENTRY_DSN_BACKEND,
+        environment=os.getenv("ENV", "development"),
+        release=os.getenv("GIT_SHA", "dev"),
+        traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
+        profiles_sample_rate=float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.1")),
+        send_default_pii=False,
+        integrations=[FastApiIntegration(), StarletteIntegration(), SqlalchemyIntegration()],
+    )
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse

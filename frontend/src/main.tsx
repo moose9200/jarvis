@@ -3,6 +3,19 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
 
+const SENTRY_DSN = import.meta.env.VITE_SENTRY_DSN;
+if (SENTRY_DSN) {
+  import("@sentry/react").then((Sentry) => {
+    Sentry.init({
+      dsn: SENTRY_DSN,
+      environment: import.meta.env.MODE,
+      tracesSampleRate: 0.1,
+      replaysSessionSampleRate: 0,
+      replaysOnErrorSampleRate: 0,
+    });
+  });
+}
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <App />
