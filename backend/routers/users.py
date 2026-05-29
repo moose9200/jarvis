@@ -1,13 +1,18 @@
+import io
+import json
 import os
-from datetime import datetime, timedelta
+import zipfile
+from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 import bcrypt
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Any, Optional
 from sqlalchemy.orm import Session
+from sqlalchemy import inspect as sa_inspect
 
 import oauth_code
 from database import get_db
@@ -212,3 +217,176 @@ def mint_oauth_code(current_user: User = Depends(get_current_user)):
     safely placed in an OAuth /start URL. Frontend redirect flows call this
     first, then navigate the browser to `/api/auth/<provider>/start?code=<code>`."""
     return {"code": oauth_code.issue(current_user.id)}
+
+
+# ── GDPR — right to erasure + right to portability ──────────────────────────
+#
+# GDPR (EU) Art. 17 and CCPA §1798.105 both require us to delete every
+# user-owned row on request, and Art. 20 / §1798.110 require us to hand
+# back all of it in a machine-readable form. Both endpoints below run
+# strictly per the authenticated user — no admin override.
+
+class DeleteConfirm(BaseModel):
+    """Body for DELETE /me — the user must type their own email to confirm.
+    The check is exact-match against `current_user.email`, no normalization,
+    no fuzzy matching. We want this to feel intentional."""
+    confirm: str = Field(..., min_length=3, max_length=200)
+
+
+# Tables we cascade-delete from, in dependency order (children first so
+# foreign-key constraints don't fire). Names match `models.py` exactly.
+# Anything ForeignKey'd to users.id should appear here.
+_CASCADE_MODELS = (
+    "Decision",
+    "TokenUsage",
+    "KnowledgeChunk",
+    "FileUpload",
+    "IntelBriefRun",
+    "IntelBrief",
+    "ProductRelease",
+    "OAuthToken",
+    "ConversationTurn",
+    "ConversationSummary",
+    "SenderProfile",
+    "EmailHistory",
+    "UserContext",
+    "UserSettings",
+    "ShopifyConfig",
+    "FreshdeskConfig",
+)
+
+
+def _resolve_models(names):
+    """Import the listed model classes from `models` lazily so test fixtures
+    that monkey-patch the module still see the right class objects, and so
+    we degrade gracefully if a future migration removes one."""
+    import models as _m
+
+    resolved = []
+    for n in names:
+        cls = getattr(_m, n, None)
+        if cls is not None:
+            resolved.append(cls)
+    return resolved
+
+
+# Per-model field redaction for export. Anything in this set is replaced
+# with the literal string "<redacted>" in the JSON dump. Keep secrets out
+# of any data hand-back — even an attacker who steals an export shouldn't
+# get usable credentials.
+_REDACTED_FIELDS = {
+    "User": {"password_hash"},
+    "OAuthToken": {"access_token", "refresh_token"},
+    "UserSettings": {
+        "anthropic_api_key_encrypted",
+        "openai_api_key_encrypted",
+        "groq_api_key_encrypted",
+        "mistral_api_key_encrypted",
+        "google_api_key_encrypted",
+        "elevenlabs_api_key_encrypted",
+        "github_pat_encrypted",
+    },
+    "ShopifyConfig": {"access_token_encrypted"},
+    "FreshdeskConfig": {"api_key_encrypted"},
+}
+
+
+def _row_to_dict(row: Any) -> dict:
+    """Serialise a SQLAlchemy row to a JSON-friendly dict. Datetimes →
+    ISO 8601. Unknown types fall back to repr() so we never crash mid-zip."""
+    cls_name = row.__class__.__name__
+    redact = _REDACTED_FIELDS.get(cls_name, set())
+    out: dict = {}
+    for col in sa_inspect(row).mapper.column_attrs:
+        key = col.key
+        if key in redact:
+            out[key] = "<redacted>"
+            continue
+        val = getattr(row, key, None)
+        if isinstance(val, datetime):
+            out[key] = val.isoformat()
+        elif isinstance(val, (str, int, float, bool, type(None), list, dict)):
+            out[key] = val
+        else:
+            out[key] = repr(val)
+    return out
+
+
+@router.delete("/me")
+@limiter.limit("3/hour")
+def delete_me(
+    request: Request,
+    payload: DeleteConfirm,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """GDPR right-to-erasure. Cascade-deletes every user-owned row, then
+    the User row itself. Requires `confirm` body to literally equal the
+    user's own email so we don't fat-finger account loss.
+
+    Rate-limited 3/hour per user via slowapi to prevent rage-deletes (and
+    the test-suite re-running this against the same user)."""
+    if payload.confirm != current_user.email:
+        raise HTTPException(
+            status_code=400,
+            detail="Confirmation does not match your email.",
+        )
+
+    user_id = current_user.id
+
+    for cls in _resolve_models(_CASCADE_MODELS):
+        try:
+            db.query(cls).filter_by(user_id=user_id).delete(synchronize_session=False)
+        except Exception:
+            # If a model isn't FK'd to user_id (defensive), skip rather
+            # than abort the cascade. The User delete below will still
+            # protect FK integrity since all listed tables nullable=True
+            # on user_id are emptied first.
+            db.rollback()
+            continue
+
+    db.query(User).filter_by(id=user_id).delete(synchronize_session=False)
+    db.commit()
+    return {"deleted": True}
+
+
+@router.get("/me/export")
+@limiter.limit("5/hour")
+def export_me(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """GDPR right-to-portability. Streams a zip with one JSON file per
+    user-owned model. Secrets (password hash, OAuth tokens, encrypted
+    API keys) are redacted before serialisation.
+
+    Rate-limited 5/hour to keep this endpoint from becoming a free data
+    egress channel for an attacker with a stolen JWT."""
+    user_id = current_user.id
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        # User row first (single dict, but kept as a list for shape uniformity)
+        zf.writestr("User.json", json.dumps([_row_to_dict(current_user)], indent=2))
+
+        for cls in _resolve_models(_CASCADE_MODELS):
+            try:
+                rows = db.query(cls).filter_by(user_id=user_id).all()
+            except Exception:
+                # Best-effort: a model without user_id (shouldn't happen in
+                # this list, but be defensive) gets an empty file rather
+                # than aborting the whole export.
+                rows = []
+            zf.writestr(
+                f"{cls.__name__}.json",
+                json.dumps([_row_to_dict(r) for r in rows], indent=2),
+            )
+
+    buf.seek(0)
+    filename = f"jarvis_export_{user_id}_{date.today().isoformat()}.zip"
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )

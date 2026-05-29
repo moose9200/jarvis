@@ -294,6 +294,34 @@ export const ProductReleasesAPI = {
     }),
 };
 
+// ── Account (GDPR delete + export) ──────────────────────────────────────────
+
+export const AccountAPI = {
+  /**
+   * GDPR right-to-erasure. `confirm` must literally equal the user's
+   * own email — backend re-validates so this isn't bypassable client-side.
+   */
+  deleteMe: (confirm: string) =>
+    call<{ deleted: boolean }>("/api/users/me", {
+      method: "DELETE",
+      body: JSON.stringify({ confirm }),
+    }),
+
+  /**
+   * GDPR right-to-portability. Streams a zip of every user-owned table
+   * with secrets redacted. We bypass the typed `call<>()` helper because
+   * the response is binary, not JSON.
+   */
+  exportMe: async (): Promise<Blob> => {
+    const t = token();
+    const r = await fetch(`${BASE}/api/users/me/export`, {
+      headers: t ? { Authorization: `Bearer ${t}` } : {},
+    });
+    if (!r.ok) throw new ApiError(r.status, "Export failed");
+    return await r.blob();
+  },
+};
+
 // ── Chat meta ───────────────────────────────────────────────────────────────
 
 export const ChatMetaAPI = {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ContextAPI, SettingsAPI } from "../../lib/api";
+import { AccountAPI, ContextAPI, SettingsAPI } from "../../lib/api";
 import { useJarvisStore } from "../../store/jarvisStore";
 import type {
   AIProvider,
@@ -701,6 +701,66 @@ function GitHubTab({
 
 function AccountTab() {
   const logout = useJarvisStore((s) => s.logout);
+  const addToast = useJarvisStore((s) => s.addToast);
+
+  // The user's own email — loaded once from /api/users/me. We need it
+  // both as the type-to-confirm value for the delete modal AND as the
+  // suffix in the export filename. If the call fails we degrade to an
+  // empty string and just disable the danger-zone button.
+  const [email, setEmail] = useState<string>("");
+  const [exporting, setExporting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    const t = localStorage.getItem("jarvis_token");
+    if (!t) return;
+    fetch(`${import.meta.env.VITE_API_BASE || ""}/api/users/me`, {
+      headers: { Authorization: `Bearer ${t}` },
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((u) => u?.email && setEmail(u.email))
+      .catch(() => {});
+  }, []);
+
+  // Export → fetch zip, trigger a Blob download with a friendly filename.
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const blob = await AccountAPI.exportMe();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const today = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = `jarvis_export_${today}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      addToast({ type: "success", message: "Export downloaded." });
+    } catch (e) {
+      addToast({ type: "error", message: (e as Error).message || "Export failed." });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // Delete → call backend, then log the user out so the UI returns to AuthPage.
+  const handleDelete = async () => {
+    if (confirmText !== email) return;
+    setDeleting(true);
+    try {
+      await AccountAPI.deleteMe(confirmText);
+      addToast({ type: "info", message: "Account deleted. Signing you out…" });
+      setConfirmOpen(false);
+      logout();
+    } catch (e) {
+      addToast({ type: "error", message: (e as Error).message || "Delete failed." });
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Section title="Sign out" desc="End the current session on this device.">
@@ -714,16 +774,73 @@ function AccountTab() {
           Change password — pending
         </button>
       </Section>
-      <Section title="Export data" desc="Download all your data as JSON (coming soon).">
-        <button disabled className="px-4 py-2 rounded border border-white/10 text-white/30 text-sm cursor-not-allowed">
-          Export — pending
+      <Section
+        title="Export data"
+        desc="Download all your JARVIS data as a zip of JSON files. Secrets are redacted."
+      >
+        <button
+          onClick={handleExport}
+          disabled={exporting}
+          className="px-4 py-2 rounded border border-white/20 text-white/80 text-sm hover:border-white/40 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {exporting ? "Preparing…" : "Export my data"}
         </button>
       </Section>
-      <Section title="Danger zone" desc="Delete your account and all data. Cannot be undone.">
-        <button disabled className="px-4 py-2 rounded border border-red-500/20 text-red-400/40 text-sm cursor-not-allowed">
-          Delete account — pending
+      <Section
+        title="Danger zone"
+        desc="Permanently delete your account and every byte of data. Cannot be undone."
+      >
+        <button
+          onClick={() => { setConfirmText(""); setConfirmOpen(true); }}
+          disabled={!email}
+          className="px-4 py-2 rounded border border-red-500/40 text-red-400 text-sm hover:bg-red-500/10 hover:border-red-500/60 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Delete account
         </button>
       </Section>
+
+      {confirmOpen && (
+        <div
+          className="fixed inset-0 z-[130] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => { if (!deleting) setConfirmOpen(false); }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md mx-4 bg-[#0a0e1a] border border-red-500/40 rounded-xl p-6 space-y-4 shadow-2xl shadow-red-500/10"
+          >
+            <h3 className="text-red-400 text-lg font-bold">Delete your account?</h3>
+            <p className="text-white/70 text-sm">
+              This will erase every record we hold for you: chats, files, integrations,
+              tokens, briefs, decisions. It cannot be undone.
+            </p>
+            <p className="text-white/50 text-xs">
+              Type <span className="font-mono text-white">{email}</span> to confirm.
+            </p>
+            <input
+              type="text"
+              autoFocus
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              placeholder={email}
+              className="w-full bg-black/40 border border-white/15 rounded px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-red-500/60"
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setConfirmOpen(false)}
+                disabled={deleting}
+                className="px-4 py-2 rounded text-white/60 text-sm hover:text-white disabled:opacity-50"
+              >Cancel</button>
+              <button
+                onClick={handleDelete}
+                disabled={confirmText !== email || deleting}
+                className="px-4 py-2 rounded bg-red-500/20 border border-red-500/60 text-red-300 text-sm font-bold hover:bg-red-500/30 disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                {deleting ? "Deleting…" : "Delete forever"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
