@@ -24,10 +24,12 @@ from sqlalchemy.orm import Session
 
 import json as _json
 
+from sqlalchemy import func
+
 from crypto import decrypt
 from models import FileUpload, TokenUsage, UserContext, UserSettings
 
-from .exceptions import NoAPIKeyError
+from .exceptions import NoAPIKeyError, TokenBudgetExceededError
 from .knowledge import search as knowledge_search
 from .memory import ConversationMemory
 from .persona import build_system_prompt
@@ -110,6 +112,12 @@ class JarvisAI:
             {"text": str, "usage": {input, output, cache_read, cache_write,
                                     thinking, cost_usd, model, provider}}
         Token usage is also persisted to the TokenUsage table."""
+        # Pre-call daily-budget guard. Raises TokenBudgetExceededError if the
+        # user has already burned their daily quota; chat router translates
+        # that to 429. Done BEFORE any memory writes or provider calls so
+        # nothing partial leaks into history.
+        self._enforce_daily_budget()
+
         # Persist a plain-text version of the user's turn (file refs as labels)
         memory_content = self._memory_text(user_message, file_ids or [])
         self.memory.append("user", memory_content)
@@ -192,6 +200,11 @@ class JarvisAI:
         tool_result turn to messages, then re-stream the next turn. Caps at
         MAX_TOOL_TURNS to prevent runaway loops.
         """
+        # Pre-call daily-budget guard. Done BEFORE we admit the response so
+        # we never tear down mid-stream — chat router catches the exception
+        # and returns 429 instead of starting the SSE.
+        self._enforce_daily_budget()
+
         memory_content = self._memory_text(user_message, file_ids or [])
         self.memory.append("user", memory_content)
         await self.memory.maybe_compress()
@@ -336,6 +349,32 @@ class JarvisAI:
         }
 
     # ── Internals ───────────────────────────────────────────────────────
+
+    def _enforce_daily_budget(self) -> None:
+        """Pre-call budget guard. Raises TokenBudgetExceededError when the
+        user has already burned at-or-over their daily input+output token
+        quota. Called from the top of respond() and stream() so we deny
+        BEFORE talking to the provider (never mid-stream).
+
+        Anonymous calls (no user_id) and users without a settings row are
+        skipped. A budget of 0 / None means unlimited."""
+        if self.user_id is None or self.settings is None:
+            return
+        budget = getattr(self.settings, "daily_token_budget", None) or 0
+        if budget <= 0:
+            return
+        today_str = _date.today().isoformat()
+        total = self.db.query(
+            func.coalesce(
+                func.sum(TokenUsage.input_tokens + TokenUsage.output_tokens),
+                0,
+            )
+        ).filter(
+            TokenUsage.user_id == self.user_id,
+            TokenUsage.date == today_str,
+        ).scalar() or 0
+        if int(total) >= int(budget):
+            raise TokenBudgetExceededError(budget=int(budget), used=int(total))
 
     def _build_system_text(self, knowledge_block: str = "") -> str:
         personality = self.settings.personality_mode if self.settings else None

@@ -73,12 +73,18 @@ def _create_token(user_id: int, email: str) -> str:
 
 
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
     """Authenticate via Bearer header only. ?token= query param is no longer
     accepted — OAuth-redirect flows must use the one-time code exchange
-    (see /api/users/oauth-code + get_oauth_user)."""
+    (see /api/users/oauth-code + get_oauth_user).
+
+    Stashes the resolved User on `request.state.user` so the slowapi
+    keyfunc (`rate_limit._user_or_ip_key`) can key on user id rather
+    than IP. Without this, users behind a shared NAT would share a
+    rate-limit bucket."""
     if not credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     try:
@@ -89,6 +95,7 @@ def get_current_user(
     user = db.query(User).filter_by(id=user_id).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    request.state.user = user
     return user
 
 

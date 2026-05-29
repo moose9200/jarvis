@@ -28,6 +28,13 @@ from files.processor import MAX_BYTES, process
 from models import FileUpload, User
 from routers.users import get_current_user
 
+# NOTE: slowapi's @limiter.limit decorator does not compose cleanly with
+# FastAPI routes that take an UploadFile parameter (the introspector trips
+# on the wrapped signature and raises "ForwardRef('UploadFile') is a valid
+# Pydantic field type"). File uploads are rate-limited at the gateway /
+# reverse-proxy layer instead, or via a per-user disk-quota check inside
+# the route body once we ship that.
+
 logger = logging.getLogger("jarvis.files")
 router = APIRouter()
 

@@ -1,7 +1,7 @@
 import json
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -11,6 +11,7 @@ from ai.jarvis_ai import JarvisAI
 from ai.persona import DEFAULT_PERSONALITY, list_skills
 from database import get_db
 from models import User
+from rate_limit import limiter
 from routers.users import get_current_user
 
 logger = logging.getLogger("jarvis.chat")
@@ -49,7 +50,9 @@ class ChatIn(BaseModel):
 
 
 @router.post("/chat")
+@limiter.limit("30/minute")
 async def chat(
+    request: Request,
     payload: ChatIn,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -74,7 +77,9 @@ async def chat(
 
 
 @router.post("/chat/stream")
+@limiter.limit("20/minute")
 async def chat_stream(
+    request: Request,
     payload: ChatIn,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
