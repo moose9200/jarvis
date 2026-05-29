@@ -14,7 +14,7 @@ if ! docker compose ps backend 2>/dev/null | grep -q "Up"; then
     echo "[pre-push] backend container not running — skipping pytest." >&2
 else
     echo "[pre-push] running backend pytest…" >&2
-    if ! docker compose exec -T backend pytest backend/tests/ -q --tb=line; then
+    if ! docker compose exec -T backend pytest tests/ -q --tb=line; then
         echo "[pre-push] ABORT: backend pytest failed." >&2
         exit 1
     fi

@@ -3,11 +3,24 @@ from fastapi.testclient import TestClient
 from unittest.mock import patch, AsyncMock
 
 from main import app
+from models import User
+from routers.users import get_current_user
+
+
+def _fake_user() -> User:
+    """Stand-in user so authenticated routes return 200 without minting a
+    real JWT in tests. We don't care about persistence here — these routes
+    only need `current_user.id` for downstream queries."""
+    return User(id=1, email="test@x.com", password_hash="x", industry="test")
 
 
 @pytest.fixture()
 def client():
-    return TestClient(app)
+    app.dependency_overrides[get_current_user] = _fake_user
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
 
 
 @patch("routers.feed.NotionConnector")
