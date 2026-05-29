@@ -86,6 +86,19 @@ export function DraggableChat() {
               }
               return next;
             }),
+          onCorrection: (corrected, violations) => {
+            // Backend guardrail caught an action claim with no matching
+            // tool call. Replace the streamed (lying) text with the
+            // honesty-corrected version and surface a toast so the user
+            // knows JARVIS auto-flagged the issue.
+            setStreamingText(corrected);
+            const phrases = violations.map((v) => `"${v.phrase}"`).join("; ");
+            addToast({
+              type: "error",
+              message: `JARVIS caught a false claim: ${phrases}. Action was NOT executed.`,
+              duration: 8000,
+            });
+          },
           onDone:  (usage) => setLastUsage(usage),
           onError: (err)   => setStreamingText((s) => s + `\n\n[stream error: ${err}]`),
         },

@@ -66,6 +66,7 @@ interface JarvisState {
       onToken?: (delta: string) => void;
       onToolStart?: (name: string) => void;
       onToolEnd?: (name: string, ok: boolean) => void;
+      onCorrection?: (correctedText: string, violations: Array<{ phrase: string; required_tools: string[] }>) => void;
       onDone?: (usage: any) => void;
       onError?: (error: string) => void;
     },
@@ -302,6 +303,13 @@ export const useJarvisStore = create<JarvisState>((set, get) => ({
                 }
               }
               callbacks.onToolEnd?.(parsed.name, !!parsed.ok);
+            } else if (parsed.type === "correction" && parsed.text) {
+              // Server-side guardrail caught the model claiming an action
+              // it never invoked the tool for. Replace the streamed-in
+              // (lying) text with the corrected, prefixed version so the
+              // user sees the honesty correction instead of the lie.
+              assembled = parsed.text;
+              callbacks.onCorrection?.(parsed.text, parsed.violations || []);
             } else if (parsed.type === "done") {
               callbacks.onDone?.(parsed.usage || {});
             } else if (parsed.type === "error") {
