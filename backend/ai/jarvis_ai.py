@@ -30,6 +30,7 @@ from crypto import decrypt
 from models import FileUpload, TokenUsage, UserContext, UserSettings
 
 from .exceptions import NoAPIKeyError, TokenBudgetExceededError
+from .guardrails import annotate_response, detect_uncalled_action_claims
 from .knowledge import search as knowledge_search
 from .memory import ConversationMemory
 from .persona import build_system_prompt
@@ -147,6 +148,9 @@ class JarvisAI:
             "thinking_tokens": 0,
             "cost_usd": 0.0,
         }
+        # Track every tool name dispatched in this chat turn so the
+        # guardrail can verify action-claim language against real calls.
+        tools_called: list[str] = []
 
         for _ in range(MAX_TOOL_TURNS):
             resp = await self._call(messages, system_text)
@@ -164,6 +168,7 @@ class JarvisAI:
                 # Dispatch every tool, collect results
                 tool_results_content = []
                 for call in resp.tool_calls:
+                    tools_called.append(call.name)
                     result = await dispatch(call.name, call.input, self.db, self.user_id)
                     tool_results_content.append(
                         {
@@ -175,8 +180,17 @@ class JarvisAI:
                 messages.append(AIMessage(role="user", content=tool_results_content))
                 continue
 
-            # Final text response
+            # Final text response — run guardrail before persisting so the
+            # memory + return value reflect any honesty correction.
             text = resp.text or "Boss, no response generated."
+            violations = detect_uncalled_action_claims(text, tools_called)
+            if violations:
+                logger.warning(
+                    "guardrail: %d uncalled-action claim(s) in respond(): %s",
+                    len(violations),
+                    [v.phrase for v in violations],
+                )
+                text = annotate_response(text, violations)
             self.memory.append("assistant", text)
             return {"text": text, "usage": self._format_usage(agg)}
 
@@ -228,6 +242,8 @@ class JarvisAI:
             "cost_usd": 0.0,
         }
         final_text_parts: list[str] = []
+        # Tools dispatched in this stream — drives end-of-turn guardrail.
+        tools_called: list[str] = []
 
         try:
             for _turn in range(MAX_TOOL_TURNS):
@@ -283,6 +299,7 @@ class JarvisAI:
                 # Dispatch each tool, build tool_result blocks
                 tool_result_blocks: list[dict] = []
                 for tc in pending_calls:
+                    tools_called.append(tc.name)
                     try:
                         result = await dispatch(tc.name, tc.input, self.db, self.user_id)
                         ok = not (isinstance(result, dict) and result.get("error"))
@@ -313,6 +330,30 @@ class JarvisAI:
             return
 
         text = "".join(final_text_parts) or "Boss, no response generated."
+
+        # Run guardrail against the assembled final text. If the model
+        # claimed an action without invoking the matching tool, emit a
+        # correction event so the frontend can surface a banner, and
+        # persist the corrected text to memory so future turns see the
+        # fix rather than the lie.
+        violations = detect_uncalled_action_claims(text, tools_called)
+        if violations:
+            logger.warning(
+                "guardrail: %d uncalled-action claim(s) in stream(): %s",
+                len(violations),
+                [v.phrase for v in violations],
+            )
+            correction = annotate_response(text, violations)
+            yield {
+                "type": "correction",
+                "text": correction,
+                "violations": [
+                    {"phrase": v.phrase, "required_tools": list(v.required_tools)}
+                    for v in violations
+                ],
+            }
+            text = correction
+
         self.memory.append("assistant", text)
 
         # Persist aggregated usage + emit done.
