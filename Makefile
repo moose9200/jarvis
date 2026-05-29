@@ -1,7 +1,8 @@
-.PHONY: help dev prod down build seed test lint migrate migrate-new shell logs psql redis-cli backup restore
+.PHONY: help setup dev prod down build seed test lint migrate migrate-new shell logs psql redis-cli backup restore
 
 help:
 	@echo "JARVIS V2 — Make targets"
+	@echo "  setup        configure git hooks (run once after clone)"
 	@echo "  dev          start full stack with hot reload"
 	@echo "  prod         start full stack in production mode (detached)"
 	@echo "  down         stop everything"
@@ -15,6 +16,12 @@ help:
 	@echo "  psql         open psql against the postgres service"
 	@echo "  logs         tail backend + worker logs"
 	@echo "  backup       pg_dump → ./backups/jarvis_YYYYMMDD.sql"
+
+setup:
+	@echo "Configuring git to use repo-owned hooks at .githooks/"
+	@git config core.hooksPath .githooks
+	@chmod +x .githooks/* 2>/dev/null || true
+	@echo "Done. Pre-push hook active."
 
 dev:
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml up

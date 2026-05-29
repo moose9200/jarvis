@@ -9,6 +9,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 - Migration safety: alembic upgrade head moved off the Dockerfile CMD; only the backend service (via docker-compose / Railway deploy command) runs migrations. Worker and beat boot without racing on schema.
 
 ### Added
+- Pre-push hook (.githooks/pre-push) runs backend pytest + frontend tsc before allowing a push to main. Activate once per clone with `make setup`. Use `git push --no-verify` only in emergencies.
 - Step 0: Security hardening — fatal boot check on missing secrets, Fernet at-rest
   encryption for OAuth tokens, one-time code exchange for OAuth-redirect flows
   (no more ?token=JWT in URLs), rate-limited register/login (5/min), 2000-char

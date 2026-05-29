@@ -1,0 +1,32 @@
+#!/usr/bin/env sh
+#
+# JARVIS pre-push hook.
+# Refuses to push if backend pytest or frontend tsc are broken.
+# Bypass for emergencies with `git push --no-verify` (use sparingly).
+
+set -e
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+# Skip if no backend stack is running (e.g. CI runner)
+if ! docker compose ps backend 2>/dev/null | grep -q "Up"; then
+    echo "[pre-push] backend container not running — skipping pytest." >&2
+else
+    echo "[pre-push] running backend pytest…" >&2
+    if ! docker compose exec -T backend pytest backend/tests/ -q --tb=line; then
+        echo "[pre-push] ABORT: backend pytest failed." >&2
+        exit 1
+    fi
+fi
+
+if [ -d frontend ]; then
+    echo "[pre-push] running frontend tsc…" >&2
+    (cd frontend && [ -d node_modules ] || npm ci --silent)
+    if ! (cd frontend && node_modules/.bin/tsc --noEmit); then
+        echo "[pre-push] ABORT: frontend tsc failed." >&2
+        exit 1
+    fi
+fi
+
+echo "[pre-push] all checks green — proceeding to push." >&2

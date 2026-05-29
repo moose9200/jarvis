@@ -11,6 +11,9 @@ A 3D JARVIS-inspired AI personal assistant. Aggregates calendar, email, tasks, a
 
 ## Quick Start
 
+### First-time setup
+After cloning, run `make setup` to enable repo-owned git hooks (pre-push runs tests + tsc).
+
 ```bash
 # Backend
 cd backend
