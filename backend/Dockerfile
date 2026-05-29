@@ -16,6 +16,5 @@ RUN mkdir -p /app/data
 
 EXPOSE 8000
 
-# Run alembic migrations, then start uvicorn. If migrations fail, the
-# container exits — we will not silently boot with a stale schema.
-CMD ["sh", "-c", "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000"]
+# Migrations are run by the entry command of the backend service ONLY (see docker-compose.yml + railway.json). Worker and beat reuse this image and MUST NOT run alembic — they share the schema written by the backend service.
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

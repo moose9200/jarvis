@@ -30,6 +30,10 @@ services:
 
   backend:
     build: ./backend
+    # Migration leader: only the backend service runs `alembic upgrade head`.
+    # Worker + beat reuse this image but launch via their own `command:` and
+    # MUST NOT run alembic (otherwise N containers race on schema migration).
+    command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000"
     ports:
       - "8000:8000"
     env_file:

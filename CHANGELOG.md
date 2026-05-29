@@ -5,6 +5,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [Unreleased]
 
+### Changed
+- Migration safety: alembic upgrade head moved off the Dockerfile CMD; only the backend service (via docker-compose / Railway deploy command) runs migrations. Worker and beat boot without racing on schema.
+
 ### Added
 - Step 0: Security hardening — fatal boot check on missing secrets, Fernet at-rest
   encryption for OAuth tokens, one-time code exchange for OAuth-redirect flows

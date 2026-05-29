@@ -23,14 +23,21 @@ domain.
 ## First-time production setup (one-off, ~30 min)
 
 1. **Provision hosting** (Railway recommended — see USER_TASKS.txt #10)
-   - One Railway project, three services:
-     - `backend`  (build context: `./backend`)
-     - `worker`   (build context: `./backend`, custom start command:
+   - One Railway project, four services (all built from `./backend` unless noted):
+     - `backend`  (custom start command:
+                   `alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT`)
+     - `worker`   (custom start command:
                    `celery -A worker worker --loglevel=info`)
+     - `beat`     (custom start command:
+                   `celery -A worker beat --loglevel=info` — ONE replica only)
      - `frontend` (build context: `./frontend`)
    - Add Railway add-ons: `PostgreSQL` (pick pgvector-enabled) and `Redis`.
-   - Connect both add-ons to backend + worker; Railway injects DATABASE_URL
-     and REDIS_URL automatically.
+   - Connect both add-ons to backend + worker + beat; Railway injects
+     DATABASE_URL and REDIS_URL automatically.
+   - **Migration ownership**: ONLY the `backend` service deploy command runs
+     `alembic upgrade head`. Worker and beat services run plain `celery ...`
+     commands — they must NOT run alembic, or you'll have N containers racing
+     on schema migration. See "Migration ownership" below.
 
 2. **Set environment variables** (Railway dashboard → service → Variables)
 
@@ -95,9 +102,11 @@ feature/your-thing → PR into staging
                     → manual approve in GH Actions → prod deploy
 ```
 
-Each deploy runs `alembic upgrade head` before the app starts. If a
-migration fails, the container exits non-zero and Railway holds the
-previous deploy in place — no half-migrated state.
+Each backend deploy runs `alembic upgrade head` before uvicorn starts
+(via the backend service deploy command). If the migration fails, the
+container exits non-zero and Railway holds the previous deploy in place
+— no half-migrated state. Worker and beat services do NOT run alembic.
+See "Migration ownership" below.
 
 ---
 
@@ -134,6 +143,30 @@ make migrate-new name="add_user_settings_billing_plan"
 # Test: make migrate
 # Commit: git add backend/alembic/versions/<file>.py && git commit
 ```
+
+---
+
+## Migration ownership
+
+`alembic upgrade head` is run by **exactly one service** per deploy: the
+`backend` service. This is enforced by construction:
+
+- `backend/Dockerfile` CMD is plain `uvicorn main:app ...` — no alembic.
+- `docker-compose.yml` backend service has an explicit `command:` that
+  prepends `alembic upgrade head && ...`.
+- On Railway, set the backend service deploy command to:
+  ```
+  alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT
+  ```
+- Worker and beat services run plain `celery ...` commands — they share
+  the schema written by backend and must NOT run alembic. With N worker
+  replicas, having alembic in the image CMD would cause N containers to
+  race on schema migration on every boot.
+
+If you add a new service that uses the same backend image (e.g. a one-off
+job runner), give it its own `command:` and do NOT include alembic unless
+you are intentionally making it the migration leader and disabling
+migration on backend.
 
 ---
 
