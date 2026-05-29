@@ -72,3 +72,34 @@ def test_health(client):
     r = client.get("/api/health")
     assert r.status_code == 200
     assert r.json()["status"] == "ok"
+
+
+def test_feed_cache_short_circuits(client):
+    """When Redis returns a cached payload, the connectors should NOT
+    be hit at all. We confirm by patching one connector to raise on
+    fetch — the request should still 200 because we never called it."""
+    from routers import feed as _feed
+
+    if _feed._cache is None:
+        pytest.skip("REDIS_URL not configured in test env")
+
+    cached_payload = {
+        "events": [],
+        "emails": [],
+        "messages": [],
+        "tasks": [],
+        "projects": [],
+    }
+    import json as _json_inner
+    _feed._cache.setex("feed:1", 30, _json_inner.dumps(cached_payload))
+    try:
+        with patch("routers.feed.GmailConnector") as gm:
+            gm.return_value.fetch = AsyncMock(side_effect=Exception("must not be called"))
+            r = client.get("/api/feed")
+            assert r.status_code == 200
+            data = r.json()
+            assert data == cached_payload
+            # If we got here without raising, the connector mock was not invoked.
+            gm.return_value.fetch.assert_not_called()
+    finally:
+        _feed._cache.delete("feed:1")

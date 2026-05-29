@@ -6,6 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 ## [Unreleased]
 
 ### Changed
+- /api/feed now caches its 11-connector fan-out in Redis (key `feed:<user_id>`, TTL 120 s). Subsequent dashboard refreshes hit Redis (~ms) instead of fan-out (~seconds). Invalidated on connector disconnect.
 - Migration safety: alembic upgrade head moved off the Dockerfile CMD; only the backend service (via docker-compose / Railway deploy command) runs migrations. Worker and beat boot without racing on schema.
 
 ### Added

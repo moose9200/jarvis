@@ -66,6 +66,14 @@ def _save(db: Session, provider: str, access: str, refresh: str = None,
     tok.expires_at = datetime.utcnow() + timedelta(seconds=ttl)
     tok.scope = scope
     db.commit()
+    # Newly connected source — invalidate feed cache so the next /api/feed
+    # request actually re-fans-out and surfaces this connector's data.
+    if user_id is not None:
+        try:
+            from routers.feed import invalidate_feed_cache
+            invalidate_feed_cache(user_id)
+        except Exception:
+            pass
 
 
 def _get_user_id(request: Request) -> Optional[int]:
@@ -331,4 +339,11 @@ def disconnect(provider: str, db: Session = Depends(get_db), current_user: User 
         raise HTTPException(404, "Provider not connected")
     db.delete(tok)
     db.commit()
+    # Best-effort: drop the user's cached feed so the disconnected source
+    # disappears from the dashboard immediately rather than after the TTL.
+    try:
+        from routers.feed import invalidate_feed_cache
+        invalidate_feed_cache(current_user.id)
+    except Exception:
+        pass
     return {"ok": True, "disconnected": provider}

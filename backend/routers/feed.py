@@ -1,6 +1,10 @@
 import asyncio
+import json as _json
+import os
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+
+import redis as _redis
 
 from database import get_db
 from models import User
@@ -20,6 +24,33 @@ from intelligence.email_scorer import EmailScorer
 
 router = APIRouter()
 
+_REDIS_URL = os.getenv("REDIS_URL")
+try:
+    _cache = _redis.Redis.from_url(_REDIS_URL) if _REDIS_URL else None
+except Exception:
+    # Bad URL or unreachable at import time — degrade to no-cache rather than
+    # crashing the whole router on boot. Real network errors surface later
+    # inside the GET/SET try blocks.
+    _cache = None
+
+_FEED_TTL_SECONDS = 120
+
+
+def _cache_key(uid: int) -> str:
+    return f"feed:{uid}"
+
+
+def invalidate_feed_cache(uid: int) -> None:
+    """Best-effort invalidation. Safe to call from any thread/route — Redis
+    errors are swallowed so connector lifecycle never fails because the cache
+    is down."""
+    if _cache is None:
+        return
+    try:
+        _cache.delete(_cache_key(uid))
+    except Exception:
+        pass
+
 
 async def _safe(coro):
     try:
@@ -31,6 +62,16 @@ async def _safe(coro):
 @router.get("/feed")
 async def feed(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     uid = current_user.id
+    cache_key = _cache_key(uid)
+
+    if _cache is not None:
+        try:
+            cached = _cache.get(cache_key)
+            if cached:
+                return _json.loads(cached)
+        except Exception:
+            # cache miss / Redis down — fall through to live fetch
+            pass
 
     def _c(cls):
         return cls(db, uid)
@@ -64,10 +105,18 @@ async def feed(db: Session = Depends(get_db), current_user: User = Depends(get_c
     tasks = (lin or []) + (jr or []) + (ntn or [])
     projects = (ghn or [])
 
-    return {
+    result = {
         "events": events,
         "emails": all_mail[:15],
         "messages": messages[:10],
         "tasks": tasks[:20],
         "projects": projects[:15],
     }
+
+    if _cache is not None:
+        try:
+            _cache.setex(cache_key, _FEED_TTL_SECONDS, _json.dumps(result, default=str))
+        except Exception:
+            pass
+
+    return result
