@@ -136,6 +136,16 @@ export function AuthPage() {
         <p className="text-white/15 text-xs text-center mt-4 tracking-wider">
           YOUR PERSONAL AI ASSISTANT
         </p>
+
+        {/* Public legal-doc links — required for OAuth verification
+            (Google + Microsoft consent screens link to these). */}
+        <div className="text-center mt-3 text-[10px] text-white/30 tracking-wider">
+          <a href="/privacy" className="hover:text-white/60 transition-colors">Privacy</a>
+          <span className="mx-2 text-white/15">·</span>
+          <a href="/terms" className="hover:text-white/60 transition-colors">Terms</a>
+          <span className="mx-2 text-white/15">·</span>
+          <a href="/cookies" className="hover:text-white/60 transition-colors">Cookies</a>
+        </div>
       </div>
     </div>
   );

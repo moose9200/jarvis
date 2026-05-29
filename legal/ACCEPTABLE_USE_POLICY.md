@@ -100,7 +100,7 @@ It is **your** responsibility to comply with disclosure requirements in your jur
 
 If you see another user abusing JARVIS, or a security issue, please tell us:
 
-- **General abuse:** hemant@wbj.team <!-- TODO: set up abuse@yourdomain.com once domain is live -->
+- **General abuse:** hemant@wbj.team (a dedicated `abuse@` mailbox on the JARVIS domain will replace this once the production domain ships)
 - **Security vulnerabilities:** hemant@wbj.team with subject "SECURITY" — please give us 90 days before public disclosure.
 - **CSAM / urgent safety:** mark subject "URGENT". We will respond within 24 hours.
 

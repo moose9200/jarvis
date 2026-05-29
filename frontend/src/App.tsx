@@ -9,6 +9,7 @@ import { VoiceVisualizer } from "./components/interface/VoiceVisualizer";
 import { ModeToggle } from "./components/interface/ModeToggle";
 import { IntegrationsModal } from "./components/onboarding/IntegrationsModal";
 import { AuthPage } from "./components/auth/AuthPage";
+import LegalPage from "./components/legal/LegalPage";
 import { ToastStack } from "./components/ui/Toast";
 import { ProfileDropdown } from "./components/ui/ProfileDropdown";
 import { DashboardCustomizer } from "./components/ui/DashboardCustomizer";
@@ -38,8 +39,28 @@ function Clock() {
   );
 }
 
+// Slug → legal-doc id. Pathnames that fall outside this map route to
+// the normal authenticated app shell. Anonymous + non-auth-gated so
+// these URLs work for OAuth verification reviewers (USER TODO #10).
+const LEGAL_ROUTE = (path: string): string | null => {
+  const slug = path.replace(/^\/+|\/+$/g, "").toLowerCase();
+  if (slug === "privacy" || slug === "terms" || slug === "cookies" ||
+      slug === "aup" || slug === "ai-disclosure") {
+    return slug;
+  }
+  return null;
+};
+
 // ── Main App ──────────────────────────────────────────────────────────────────
 export default function App() {
+  // Anonymous legal-doc routing — runs BEFORE the auth gate so visitors
+  // (and OAuth verification crawlers) can reach Privacy / Terms without
+  // logging in.
+  const legalSlug = LEGAL_ROUTE(window.location.pathname);
+  if (legalSlug) {
+    return <LegalPage slug={legalSlug} />;
+  }
+
   const isAuthenticated = useJarvisStore((s) => s.isAuthenticated);
   const mode = useJarvisStore((s) => s.mode);
   const setWakeState = useJarvisStore((s) => s.setWakeState);

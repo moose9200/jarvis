@@ -2,7 +2,7 @@
 
 **Effective date:** 2026-05-20
 **Last updated:** 2026-05-20
-**Controller:** Braivex <!-- TODO: legal entity name, registered address, India -->
+**Controller:** Braivex (operated by WBJ Team Private Limited, Bengaluru, Karnataka, India)
 **Contact:** hemant@wbj.team
 
 ---
@@ -193,9 +193,9 @@ We will email you 30 days before any material change. The current version always
 Privacy questions, data requests, or breach reports:
 
 - **Email:** hemant@wbj.team
-- **Postal:** <!-- TODO: registered address, India -->
-- **EU/UK representative:** <!-- TODO: appoint if/when we have >5,000 EU users -->
-- **Data Protection Officer:** <!-- TODO: appoint if processing escalates -->
+- **Postal:** WBJ Team Private Limited, Bengaluru, Karnataka, India (full street address available on written request)
+- **EU/UK representative:** Not currently appointed — Braivex does not exceed the GDPR Article 27 / UK GDPR threshold for compulsory representation. We will appoint a representative once we exceed 5,000 EU users or undertake material monitoring activity.
+- **Data Protection Officer:** Not currently required under DPDP Act §10 thresholds; will appoint if processing volume escalates.
 
 ---
 

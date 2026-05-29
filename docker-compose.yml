@@ -42,6 +42,13 @@ services:
       DATABASE_URL: postgresql://jarvis:${POSTGRES_PASSWORD:-jarvis-dev-pw}@postgres:5432/jarvis
       REDIS_URL: redis://redis:6379/0
       PYTHONPATH: /app
+    volumes:
+      # Mount the repo-root legal/ directory read-only so the FastAPI
+      # legal router can serve the markdown documents. The legal/ dir
+      # sits outside the backend/ build context so we'd otherwise have
+      # to duplicate it or restructure the Dockerfile context — a bind
+      # mount keeps the source of truth in git and edits are live.
+      - ./legal:/app/legal:ro
     depends_on:
       postgres:
         condition: service_healthy

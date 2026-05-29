@@ -3,7 +3,7 @@
 **Effective date:** 2026-05-20
 **Last updated:** 2026-05-20
 
-These Terms govern your use of JARVIS, an AI assistant service operated by Braivex <!-- TODO: legal entity name -->, an Indian company. "We" means Braivex. "You" means the person or organisation using JARVIS.
+These Terms govern your use of JARVIS, an AI assistant service operated by Braivex (WBJ Team Private Limited), an Indian company. "We" means Braivex. "You" means the person or organisation using JARVIS.
 
 By creating an account or using the Service you agree to these Terms. If you don't agree, don't use the Service.
 
@@ -95,10 +95,10 @@ When you connect a service, you accept that service's terms in addition to ours.
 
 JARVIS has a free tier and paid plans (Pro, Founder — Stripe-billed).
 
-- **Free tier limits:** <!-- TODO: token budget, file uploads, intel briefs per month --> per month. Hit a limit and the relevant feature pauses until next month or until you upgrade.
+- **Free tier limits:** 10,000 input+output AI tokens per day, 50 file uploads per month, 5 Intel Briefs per month. Hit a limit and the relevant feature pauses until the next reset window or until you upgrade.
 - **Paid plans:** monthly or annual. Billed in advance. Auto-renew unless cancelled.
 - **Cancellation:** any time from Settings → Account. Cancellation stops auto-renewal; access continues until the period ends.
-- **Refunds:** <!-- TODO: full refund within 14 days, prorated otherwise? -->
+- **Refunds:** full refund within 14 days of your first paid subscription charge. After that 14-day window we do not issue prorated refunds. Cancellation stops the next renewal immediately; access continues until the end of the paid period.
 - **Plan changes:** upgrades take effect immediately and we prorate. Downgrades take effect at next renewal.
 - **Taxes:** prices exclude taxes unless stated. GST/VAT charged where applicable.
 
@@ -158,7 +158,7 @@ You will indemnify and hold us harmless from any third-party claim arising from:
 
 These Terms are governed by the laws of India.
 
-Any dispute will be resolved by binding arbitration seated in Bengaluru, India <!-- TODO: confirm venue with founder -->, conducted under the Arbitration and Conciliation Act, 1996, in English, by a single arbitrator. Each party bears its own legal costs unless the arbitrator awards otherwise.
+Any dispute will be resolved by binding arbitration seated in Bengaluru, Karnataka, India, conducted under the Arbitration and Conciliation Act, 1996, in English, by a single arbitrator. Each party bears its own legal costs unless the arbitrator awards otherwise.
 
 EU consumers may have additional rights under their local law that cannot be waived — those rights still apply.
 

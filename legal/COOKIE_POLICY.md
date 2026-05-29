@@ -12,7 +12,7 @@ This page lists every cookie and localStorage key we use, why, and how to remove
 
 | Name | Type | Purpose | Lifetime | Set by |
 |---|---|---|---|---|
-| `session` <!-- TODO confirm cookie name in Starlette SessionMiddleware --> | HttpOnly, Secure, SameSite=Lax | Holds OAuth `state` parameter during the connect flow so we can verify the callback. Required for OAuth security (CSRF protection). | Browser session | JARVIS backend |
+| `session` | HttpOnly, Secure, SameSite=Lax | Holds OAuth `state` parameter during the connect flow so we can verify the callback. Required for OAuth security (CSRF protection). | Browser session | JARVIS backend (Starlette `SessionMiddleware`) |
 
 That's the only cookie we set. No third-party JavaScript sets cookies on our domain.
 
