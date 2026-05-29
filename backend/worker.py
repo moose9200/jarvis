@@ -24,6 +24,7 @@ for _required in ("JWT_SECRET", "SESSION_SECRET", "TOKEN_ENCRYPTION_KEY"):
         sys.exit(1)
 
 from celery import Celery
+from celery.schedules import crontab
 
 _SENTRY_DSN_BACKEND = os.getenv("SENTRY_DSN_BACKEND")
 if _SENTRY_DSN_BACKEND:
@@ -51,6 +52,7 @@ celery_app = Celery(
         "tasks.decisions",        # Decision Inbox builder
         "tasks.product_watcher",  # Industry product-release watcher (Phase 1)
         "tasks.mention_watcher",  # Celebrity / influencer mention watcher (Phase 3)
+        "tasks.backup",           # Nightly pg_dump → S3 + retention prune
         # Add task modules here as new background jobs are built:
         # "tasks.email_ingest",
         # "tasks.shopify_sync",
@@ -99,6 +101,15 @@ celery_app.conf.beat_schedule = {
     "mention-watcher-every-12-hours": {
         "task": "mention_watcher.run_for_all",
         "schedule": 43200.0,   # 12 hours
+    },
+    # Nightly pg_dump → S3 backup. Fires at 03:00 UTC daily. Task itself
+    # short-circuits with `{skipped: True}` when S3 env vars are absent,
+    # so it's safe to land before R2 credentials are wired (USER TODO
+    # #3). Once credentials drop in, the next 0300 UTC tick uploads
+    # without any code change.
+    "pg-backup-daily-0300-utc": {
+        "task": "backup.pg_dump_to_s3",
+        "schedule": crontab(hour=3, minute=0),  # 03:00 UTC every day
     },
 }
 

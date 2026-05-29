@@ -1,8 +1,12 @@
 FROM python:3.11-slim
 
-# psycopg2 needs libpq; build tools removed after install to keep image small.
+# psycopg2 needs libpq; postgresql-client provides pg_dump for the nightly
+# backup Celery task. Both layers cleaned up after install to keep image
+# small. Debian-stable ships postgresql-client 15; pg_dump 15 → server 16
+# is forward-compatible per Postgres versioning policy.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
