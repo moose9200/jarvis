@@ -12,6 +12,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ### Added
 - GDPR routes: DELETE /api/users/me (cascade-deletes all user-owned rows; rate-limited 3/hour; requires email-confirm in body) and GET /api/users/me/export (streams a zip of every user-owned table as JSON; secrets redacted; rate-limited 5/hour). Settings → Account stub buttons now functional.
+- Celebrity / influencer mention monitor (Phase 3): Google News RSS + trade-press RSS + Reddit keyword filter. New Mention model + alembic 0007 + Celery beat every 12 h (gated on jewellery/piercing/tattoo industry keywords). New endpoints: GET /api/mentions, POST /refresh, GET /sources. New chat tool: get_recent_mentions.
 - Pre-push hook (.githooks/pre-push) runs backend pytest + frontend tsc before allowing a push to main. Activate once per clone with `make setup`. Use `git push --no-verify` only in emergencies.
 - Rate limits on `/api/chat` (30/min per user) and `/api/chat/stream` (20/min per user) to bound AI-cost runaway. JarvisAI also enforces `UserSettings.daily_token_budget` before each provider call — raises `TokenBudgetExceededError` (returns 429) if today's input+output tokens already exceeded the budget.
 - Step 0: Security hardening — fatal boot check on missing secrets, Fernet at-rest

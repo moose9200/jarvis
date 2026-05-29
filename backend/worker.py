@@ -50,6 +50,7 @@ celery_app = Celery(
         "tasks.intel",            # IntelBrief auto-runs
         "tasks.decisions",        # Decision Inbox builder
         "tasks.product_watcher",  # Industry product-release watcher (Phase 1)
+        "tasks.mention_watcher",  # Celebrity / influencer mention watcher (Phase 3)
         # Add task modules here as new background jobs are built:
         # "tasks.email_ingest",
         # "tasks.shopify_sync",
@@ -90,6 +91,14 @@ celery_app.conf.beat_schedule = {
     "product-watcher-every-6-hours": {
         "task": "product_watcher.run_for_all",
         "schedule": 21600.0,   # 6 hours
+    },
+    # Celebrity / influencer mention watcher (Google News + trade-press
+    # RSS + Reddit). Lower-cardinality data than product feeds — runs
+    # every 12 hours so we stay polite with the unauthenticated RSS
+    # endpoints.
+    "mention-watcher-every-12-hours": {
+        "task": "mention_watcher.run_for_all",
+        "schedule": 43200.0,   # 12 hours
     },
 }
 

@@ -366,3 +366,47 @@ class ProductRelease(Base):
     first_seen_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     last_seen_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     surfaced_to_user = Column(Boolean, default=False, index=True)  # flips true after Decision row created
+
+
+class Mention(Base):
+    """A celebrity / influencer / press mention discovered by the
+    mention watcher.
+
+    Phase 3 of the industry-monitoring track. Surfaces public chatter
+    touching the user's vertical (jewellery / piercing / tattoo today)
+    from unauthenticated sources:
+      - Google News RSS (news.google.com/rss/search?q=...)
+      - Trade-press RSS feeds (Pain, Tattoolife, Inked, ...)
+      - Reddit hot.json on industry subreddits, filtered for celebrity
+        co-occurrence keywords
+
+    One row per (url, user_id). Re-fetches are idempotent — the watcher
+    upserts on every run and only surfaces a Decision row the first
+    time a URL is observed.
+
+    Watcher source: backend/intel/mention_watcher.py
+    Task:          backend/tasks/mention_watcher.py
+    Endpoint:      GET /api/mentions
+    """
+    __tablename__ = "mentions"
+    __table_args__ = (
+        UniqueConstraint("url", "user_id", name="uq_mentions_url_user"),
+    )
+
+    id = Column(Integer, primary_key=True)
+
+    # Multi-tenant: each row belongs to a user so different tenants can
+    # subscribe to different feeds without cross-contamination.
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+
+    # google_news | rss:<host> | reddit:r/<sub>
+    source = Column(String, nullable=False)
+    title = Column(String, nullable=False)
+    url = Column(String, nullable=False, index=True)
+    summary = Column(Text, nullable=True)
+    author = Column(String, nullable=True)
+    published_at = Column(DateTime, nullable=True)
+
+    # Local bookkeeping
+    first_seen_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    surfaced_to_user = Column(Boolean, default=False, index=True)

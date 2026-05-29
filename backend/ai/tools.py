@@ -147,6 +147,33 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
         },
     },
     {
+        "name": "get_recent_mentions",
+        "description": (
+            "Look up celebrity / influencer / press mentions of the "
+            "user's industry (jewellery / piercing / tattoo). Sources: "
+            "Google News RSS + trade-press RSS + relevant subreddits "
+            "filtered for celebrity-noise keywords. Use for questions "
+            "like 'is anyone famous talking about piercing this week?' "
+            "or 'show me press mentions in my industry'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "since_hours": {
+                    "type": "integer",
+                    "description": "Only items first seen in the last N hours. Default 168 (one week).",
+                    "default": 168,
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max items to return. Default 15, hard cap 30.",
+                    "default": 15,
+                },
+            },
+            "required": [],
+        },
+    },
+    {
         "name": "send_email",
         "description": "Send an email via Gmail (falls back to Outlook if Gmail not connected).",
         "input_schema": {
@@ -278,6 +305,35 @@ async def dispatch(name: str, inputs: Dict[str, Any], db: Session, user_id: int 
                 "price": r.price,
                 "url": r.url,
                 "first_seen": r.first_seen_at.isoformat() if r.first_seen_at else None,
+            }
+            for r in rows
+        ]
+
+    elif name == "get_recent_mentions":
+        # Celebrity / influencer / press mention lookup. Pure
+        # SQLAlchemy — no connectors involved.
+        from datetime import datetime, timedelta
+        from models import Mention
+
+        if user_id is None:
+            return []
+        since_hours = int(inputs.get("since_hours", 168))
+        limit = max(1, min(int(inputs.get("limit", 15)), 30))
+
+        q = db.query(Mention).filter(Mention.user_id == user_id)
+        cutoff = datetime.utcnow() - timedelta(hours=since_hours)
+        q = q.filter(Mention.first_seen_at >= cutoff)
+        rows = q.order_by(Mention.first_seen_at.desc()).limit(limit).all()
+
+        return [
+            {
+                "title": r.title,
+                "url": r.url,
+                "source": r.source,
+                "summary": r.summary,
+                "author": r.author,
+                "published_at": r.published_at.isoformat() if r.published_at else None,
+                "first_seen_at": r.first_seen_at.isoformat() if r.first_seen_at else None,
             }
             for r in rows
         ]
